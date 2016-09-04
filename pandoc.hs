@@ -70,7 +70,7 @@ import qualified Data.Yaml as Yaml
 import qualified Data.Text as T
 import Control.Applicative ((<|>))
 import Text.Pandoc.Readers.Txt2Tags (getT2TMeta)
-import Paths_pandoc (getDataDir)
+import Paths_pandoc_light (getDataDir)
 import Text.Printf (printf)
 import Text.Pandoc.Error
 

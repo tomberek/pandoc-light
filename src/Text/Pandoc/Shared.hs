@@ -140,14 +140,14 @@ import Data.Sequence (ViewR(..), ViewL(..), viewl, viewr)
 import qualified Data.Text as T (toUpper, pack, unpack)
 import Data.ByteString.Lazy (toChunks, fromChunks)
 import qualified Data.ByteString.Lazy as BL
-import Paths_pandoc (version)
+import Paths_pandoc_light (version)
 
 import Codec.Archive.Zip
 
 #ifdef EMBED_DATA_FILES
 import Text.Pandoc.Data (dataFiles)
 #else
-import Paths_pandoc (getDataFileName)
+import Paths_pandoc_light (getDataFileName)
 #endif
 #ifdef HTTP_CLIENT
 import Network.HTTP.Client (httpLbs, responseBody, responseHeaders,

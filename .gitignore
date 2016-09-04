@@ -23,3 +23,6 @@ windows/*.wixobj
 data/reference.docx
 data/reference.odt
 .stack-work
+*.js
+*.js_hi
+*.jsexe
