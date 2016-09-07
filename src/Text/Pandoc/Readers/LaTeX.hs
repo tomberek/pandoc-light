@@ -53,7 +53,6 @@ import System.FilePath (replaceExtension, (</>), takeExtension, addExtension)
 import Data.List (intercalate)
 import qualified Data.Map as M
 import qualified Control.Exception as E
-import Text.Pandoc.Highlighting (fromListingsLanguage)
 import Text.Pandoc.ImageSize (numUnit, showFl)
 import Text.Pandoc.Error
 
@@ -1102,8 +1101,7 @@ environments = M.fromList
                                       else k, v) | (k,v) <- options ]
                       let classes = [ "numberLines" |
                                       lookup "numbers" options == Just "left" ]
-                                 ++ maybeToList (lookup "language" options
-                                         >>= fromListingsLanguage)
+                                 ++ maybeToList (lookup "language" options)
                       let attr = (fromMaybe "" (lookup "label" options),classes,kvs)
                       codeBlockWith attr <$> verbEnv "lstlisting")
   , ("minted",     do options <- option [] keyvals

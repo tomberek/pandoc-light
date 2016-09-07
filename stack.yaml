@@ -1,28 +1,29 @@
-flags:
-  pandoc-light:
-    trypandoc: false
-    https: true
-    embed_data_files: true
-    old-locale: false
-    network-uri: true
-    full: false
-compiler: ghcjs-0.2.0_ghc-7.10.3
-# compiler-check: match-exact
+compiler-check: match-exact
+resolver: nightly-2016-04-17
+# compiler: ghcjs-0.2.0.820160417_ghc-7.10.3
+compiler: ghc-7.10.3
+system-ghc: false
 setup-info:
   ghcjs:
     source:
-      ghcjs-0.2.0.20160414_ghc-7.10.3:
-        url: https://s3.amazonaws.com/ghcjs/ghcjs-0.2.0.20160414_ghc-7.10.3.tar.gz
-        sha1: 6d6f307503be9e94e0c96ef1308c7cf224d06be3
+      ghcjs-0.2.0.820160417_ghc-7.10.3:
+        url: "https://tolysz.org/ghcjs/nightly-2016-04-17-820160417.tar.gz"
+nix:
+  enable: true
 packages:
-- '.'
+- location: '.'
 extra-deps:
-- Cabal-1.24.0.0
-- http-client-0.5.0
-- http-client-tls-0.3.0
-- data-default-instances-base-0.1.0.1
-- data-default-class-0.1.2.0
-- cmark-0.5.3.1
-- texmath-0.8.6.5
+# - network-uri-2.6.1.0
+# - memory-0.12
+# - unix-2.7.2.0
+# - hsb2hs-0.3.1
+# - Cabal-1.22.9.0
+# - cabal-install-1.22.9.0
+# - http-client-0.5.0
+# - http-client-tls-0.3.0
+# - data-default-instances-base-0.1.0.1
+# - data-default-class-0.1.2.0
+# - cmark-0.5.3.1
+# - texmath-0.8.6.5
 # resolver: lts-6.14
-resolver: nightly-2016-07-11
+# resolver: nightly-2016-07-18

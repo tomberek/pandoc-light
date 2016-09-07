@@ -50,10 +50,6 @@ import Control.Monad.State
 import qualified Text.Parsec as P
 import Text.Pandoc.Pretty
 import Text.Pandoc.ImageSize
-import Text.Pandoc.Slides
-import Text.Pandoc.Highlighting (highlight, styleToLaTeX,
-                                 formatLaTeXInline, formatLaTeXBlock,
-                                 toListingsLanguage)
 
 data WriterState =
   WriterState { stInNote        :: Bool          -- true if we're in a note
@@ -71,7 +67,6 @@ data WriterState =
               , stLHS           :: Bool          -- true if document has literate haskell code
               , stBook          :: Bool          -- true if document uses book or memoir class
               , stCsquotes      :: Bool          -- true if document uses csquotes
-              , stHighlighting  :: Bool          -- true if document has highlighted code
               , stIncremental   :: Bool          -- true if beamer lists should be displayed bit by bit
               , stInternalLinks :: [String]      -- list of internal link targets
               , stUsesEuro      :: Bool          -- true if euro symbol used
@@ -88,7 +83,7 @@ writeLaTeX options document =
                 stTable = False, stStrikeout = False,
                 stUrl = False, stGraphics = False,
                 stLHS = False, stBook = writerChapters options,
-                stCsquotes = False, stHighlighting = False,
+                stCsquotes = False,
                 stIncremental = writerIncremental options,
                 stInternalLinks = [], stUsesEuro = False }
 
@@ -139,9 +134,7 @@ pandocToLaTeX options (Pandoc meta blocks) = do
                                else case last blocks' of
                                  Header 1 _ il -> (init blocks', il)
                                  _             -> (blocks', [])
-  blocks''' <- if writerBeamer options
-                  then toSlides blocks''
-                  else return blocks''
+  blocks''' <- return blocks''
   body <- mapM (elementToLaTeX options) $ hierarchicalize blocks'''
   (biblioTitle :: String) <- liftM (render colwidth) $ inlineListToLaTeX lastHeader
   let main = render colwidth $ vsep body
@@ -182,10 +175,6 @@ pandocToLaTeX options (Pandoc meta blocks) = do
                   defField "euro" (stUsesEuro st) $
                   defField "listings" (writerListings options || stLHS st) $
                   defField "beamer" (writerBeamer options) $
-                  (if stHighlighting st
-                      then defField "highlighting-macros" (styleToLaTeX
-                                $ writerHighlightStyle options )
-                      else id) $
                   (case writerCiteMethod options of
                          Natbib   -> defField "biblio-title" biblioTitle .
                                      defField "natbib" True
@@ -317,50 +306,6 @@ toLabel z = go `fmap` stringToLaTeX URLString z
 inCmd :: String -> Doc -> Doc
 inCmd cmd contents = char '\\' <> text cmd <> braces contents
 
-toSlides :: [Block] -> State WriterState [Block]
-toSlides bs = do
-  opts <- gets stOptions
-  let slideLevel = fromMaybe (getSlideLevel bs) $ writerSlideLevel opts
-  let bs' = prepSlides slideLevel bs
-  concat `fmap` (mapM (elementToBeamer slideLevel) $ hierarchicalize bs')
-
-elementToBeamer :: Int -> Element -> State WriterState [Block]
-elementToBeamer _slideLevel (Blk b) = return [b]
-elementToBeamer slideLevel  (Sec lvl _num (ident,classes,kvs) tit elts)
-  | lvl >  slideLevel = do
-      bs <- concat `fmap` mapM (elementToBeamer slideLevel) elts
-      return $ Para ( RawInline "latex" "\\begin{block}{"
-                    : tit ++ [RawInline "latex" "}"] )
-             : bs ++ [RawBlock "latex" "\\end{block}"]
-  | lvl <  slideLevel = do
-      bs <- concat `fmap` mapM (elementToBeamer slideLevel) elts
-      return $ (Header lvl (ident,classes,kvs) tit) : bs
-  | otherwise = do -- lvl == slideLevel
-      -- note: [fragile] is required or verbatim breaks
-      let hasCodeBlock (CodeBlock _ _) = [True]
-          hasCodeBlock _               = []
-      let hasCode (Code _ _) = [True]
-          hasCode _          = []
-      let fragile = "fragile" `elem` classes ||
-                    not (null $ query hasCodeBlock elts ++ query hasCode elts)
-      let frameoptions = ["allowdisplaybreaks", "allowframebreaks",
-                          "b", "c", "t", "environment",
-                          "label", "plain", "shrink", "standout"]
-      let optionslist = ["fragile" | fragile] ++
-                        [k | k <- classes, k `elem` frameoptions] ++
-                        [k ++ "=" ++ v | (k,v) <- kvs, k `elem` frameoptions]
-      let options = if null optionslist
-                       then ""
-                       else "[" ++ intercalate "," optionslist ++ "]"
-      let slideStart = Para $ RawInline "latex" ("\\begin{frame}" ++ options) :
-                if tit == [Str "\0"]  -- marker for hrule
-                   then []
-                   else (RawInline "latex" "{") : tit ++ [RawInline "latex" "}"]
-      let slideEnd = RawBlock "latex" "\\end{frame}"
-      -- now carve up slide into blocks if there are sections inside
-      bs <- concat `fmap` mapM (elementToBeamer slideLevel) elts
-      return $ slideStart : bs ++ [slideEnd]
-
 isListBlock :: Block -> Bool
 isListBlock (BulletList _)     = True
 isListBlock (OrderedList _ _)  = True
@@ -472,10 +417,7 @@ blockToLaTeX (CodeBlock (identifier,classes,keyvalAttr) str) = do
   let listingsCodeBlock = do
         st <- get
         let params = if writerListings (stOptions st)
-                     then (case getListingsLanguage classes of
-                                Just l  -> [ "language=" ++ mbBraced l ]
-                                Nothing -> []) ++
-                          [ "numbers=left" | "numberLines" `elem` classes
+                     then [ "numbers=left" | "numberLines" `elem` classes
                              || "number" `elem` classes
                              || "number-lines" `elem` classes ] ++
                           [ (if key == "startFrom"
@@ -496,16 +438,10 @@ blockToLaTeX (CodeBlock (identifier,classes,keyvalAttr) str) = do
                       (map text params))
         return $ flush ("\\begin{lstlisting}" <> printParams $$ text str $$
                  "\\end{lstlisting}") $$ cr
-  let highlightedCodeBlock =
-        case highlight formatLaTeXBlock ("",classes,keyvalAttr) str of
-               Nothing -> rawCodeBlock
-               Just  h -> modify (\st -> st{ stHighlighting = True }) >>
-                          return (flush $ linkAnchor $$ text h)
   case () of
      _ | isEnabled Ext_literate_haskell opts && "haskell" `elem` classes &&
          "literate" `elem` classes                      -> lhsCodeBlock
        | writerListings opts                            -> listingsCodeBlock
-       | writerHighlight opts && not (null classes)     -> highlightedCodeBlock
        | otherwise                                      -> rawCodeBlock
 blockToLaTeX (RawBlock f x)
   | f == Format "latex" || f == Format "tex"
@@ -869,12 +805,11 @@ inlineToLaTeX (Cite cits lst) = do
      Biblatex -> citationsToBiblatex cits
      _        -> inlineListToLaTeX lst
 
-inlineToLaTeX (Code (_,classes,_) str) = do
+inlineToLaTeX (Code (_,_,_) str) = do
   opts <- gets stOptions
   inHeading <- gets stInHeading
   case () of
      _ | writerListings opts  && not inHeading      -> listingsCode
-       | writerHighlight opts && not (null classes) -> highlightCode
        | otherwise                                  -> rawCode
    where listingsCode = do
            inNote <- gets stInNote
@@ -883,11 +818,6 @@ inlineToLaTeX (Code (_,classes,_) str) = do
                           (c:_) -> c
                           []    -> '!'
            return $ text $ "\\lstinline" ++ [chr] ++ str ++ [chr]
-         highlightCode = do
-           case highlight formatLaTeXInline ("",classes,[]) str of
-                  Nothing -> rawCode
-                  Just  h -> modify (\st -> st{ stHighlighting = True }) >>
-                             return (text h)
          rawCode = liftM (text . (\s -> "\\texttt{" ++ escapeSpaces s ++ "}"))
                           $ stringToLaTeX CodeString str
            where
@@ -1100,11 +1030,6 @@ citationsToBiblatex (c:cs) = do
               = citeArguments p s k
 
 citationsToBiblatex _ = return empty
-
--- Determine listings language from list of class attributes.
-getListingsLanguage :: [String] -> Maybe String
-getListingsLanguage [] = Nothing
-getListingsLanguage (x:xs) = toListingsLanguage x <|> getListingsLanguage xs
 
 -- Extract a key from divs and spans
 extract :: String -> Block -> [String]

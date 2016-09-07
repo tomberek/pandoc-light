@@ -38,9 +38,6 @@ import Text.Pandoc.Options
 import Text.Pandoc.ImageSize
 import Text.Pandoc.Templates
 import Text.Pandoc.Readers.TeXMath
-import Text.Pandoc.Slides
-import Text.Pandoc.Highlighting ( highlight, styleToCss,
-                                  formatHtmlInline, formatHtmlBlock )
 import Text.Pandoc.XML (fromEntities, escapeStringForXML)
 import Network.URI ( parseURIReference, URI(..), unEscapeString )
 import Network.HTTP ( urlEncode )
@@ -48,7 +45,7 @@ import Numeric ( showHex )
 import Data.Char ( ord, toLower )
 import Data.List ( isPrefixOf, intersperse )
 import Data.String ( fromString )
-import Data.Maybe ( catMaybes, fromMaybe, isJust )
+import Data.Maybe ( catMaybes, isJust )
 import Control.Monad.State
 import Text.Blaze.Html hiding(contents)
 #if MIN_VERSION_blaze_markup(0,6,3)
@@ -115,6 +112,19 @@ writeHtml opts d =
          then inTemplate opts context body
          else body
 
+-- | Find level of header that starts slides (defined as the least header
+-- level that occurs before a non-header/non-hrule in the blocks).
+getSlideLevel :: [Block] -> Int
+getSlideLevel = go 6
+  where go least (Header n _ _ : x : xs)
+                 | n < least && nonHOrHR x = go n xs
+                 | otherwise               = go least (x:xs)
+        go least (_ : xs) = go least xs
+        go least [] = least
+        nonHOrHR (Header{}) = False
+        nonHOrHR (HorizontalRule) = False
+        nonHOrHR _ = True
+
 -- result is (title, authors, date, toc, body, new variables)
 pandocToHtml :: WriterOptions
              -> Pandoc
@@ -127,11 +137,8 @@ pandocToHtml opts (Pandoc meta blocks) = do
   let stringifyHTML = escapeStringForXML . stringify
   let authsMeta = map stringifyHTML $ docAuthors meta
   let dateMeta  = stringifyHTML $ docDate meta
-  let slideLevel = fromMaybe (getSlideLevel blocks) $ writerSlideLevel opts
-  let sects = hierarchicalize $
-              if writerSlideVariant opts == NoSlides
-                 then blocks
-                 else prepSlides slideLevel blocks
+  let slideLevel = getSlideLevel blocks
+  let sects = hierarchicalize $ blocks
   toc <- if writerTableOfContents opts
             then tableOfContents opts sects
             else return Nothing
@@ -172,11 +179,7 @@ pandocToHtml opts (Pandoc meta blocks) = do
                                        ("/*<![CDATA[*/\n" ++ s ++ "/*]]>*/\n")
                                         | otherwise -> mempty
                                  Nothing -> mempty
-  let context =   (if stHighlighting st
-                      then defField "highlighting-css"
-                             (styleToCss $ writerHighlightStyle opts)
-                      else id) $
-                  (if stMath st
+  let context =   (if stMath st
                       then defField "math" (renderHtml math)
                       else id) $
                   defField "quotes" (stQuotes st) $
@@ -492,17 +495,10 @@ blockToHtml opts (CodeBlock (id',classes,keyvals) rawCode) = do
   let tolhs = isEnabled Ext_literate_haskell opts &&
                 any (\c -> map toLower c == "haskell") classes &&
                 any (\c -> map toLower c == "literate") classes
-      classes' = if tolhs
-                    then map (\c -> if map toLower c == "haskell"
-                                       then "literatehaskell"
-                                       else c) classes
-                    else classes
       adjCode  = if tolhs
                     then unlines . map ("> " ++) . lines $ rawCode
                     else rawCode
-      hlCode   = if writerHighlight opts -- check highlighting options
-                    then highlight formatHtmlBlock (id',classes',keyvals) adjCode
-                    else Nothing
+      hlCode   = Nothing
   case hlCode of
          Nothing -> return $ addAttrs opts (id',classes,keyvals)
                            $ H.pre $ H.code $ toHtml adjCode
@@ -728,9 +724,7 @@ inlineToHtml opts inline =
                                modify $ \st -> st{ stHighlighting = True }
                                return $ addAttrs opts (id',[],keyvals) h
                         where (id',_,keyvals) = attr
-                              hlCode = if writerHighlight opts
-                                          then highlight formatHtmlInline attr str
-                                          else Nothing
+                              hlCode = Nothing
     (Strikeout lst)  -> inlineListToHtml opts lst >>=
                         return . H.del
     (SmallCaps lst)   -> inlineListToHtml opts lst >>=
@@ -807,7 +801,7 @@ inlineToHtml opts inline =
               let brtag = if writerHtml5 opts then H5.br else H.br
               return  $ case t of
                          InlineMath  -> m
-                         DisplayMath -> brtag >> m >> brtag 
+                         DisplayMath -> brtag >> m >> brtag
     (RawInline f str)
       | f == Format "html" -> return $ preEscapedString str
       | otherwise          -> return mempty

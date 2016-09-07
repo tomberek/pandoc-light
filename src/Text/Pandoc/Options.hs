@@ -51,7 +51,6 @@ module Text.Pandoc.Options ( Extension(..)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Default
-import Text.Pandoc.Highlighting (Style, pygments)
 import Text.Pandoc.MediaBag (MediaBag)
 import Data.Data (Data)
 import Data.Typeable (Typeable)
@@ -364,8 +363,6 @@ data WriterOptions = WriterOptions
   , writerSlideLevel       :: Maybe Int  -- ^ Force header level of slides
   , writerChapters         :: Bool       -- ^ Use "chapter" for top-level sects
   , writerListings         :: Bool       -- ^ Use listings package for code
-  , writerHighlight        :: Bool       -- ^ Highlight source code
-  , writerHighlightStyle   :: Style      -- ^ Style to use for highlighting
   , writerSetextHeaders    :: Bool       -- ^ Use setext headers for levels 1-2 in markdown
   , writerTeXLigatures     :: Bool       -- ^ Use tex ligatures quotes, dashes in latex
   , writerEpubVersion      :: Maybe EPUBVersion -- ^ Nothing or EPUB version
@@ -411,8 +408,6 @@ instance Default WriterOptions where
                       , writerSlideLevel       = Nothing
                       , writerChapters         = False
                       , writerListings         = False
-                      , writerHighlight        = False
-                      , writerHighlightStyle   = pygments
                       , writerSetextHeaders    = True
                       , writerTeXLigatures     = True
                       , writerEpubVersion      = Nothing

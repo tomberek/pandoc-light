@@ -26,3 +26,8 @@ data/reference.odt
 *.js
 *.js_hi
 *.jsexe
+.ghcjsi
+cabal.config
+default.nix
+ghcid.sh
+shell.nix

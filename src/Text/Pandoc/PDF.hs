@@ -43,7 +43,6 @@ import System.Directory
 import Data.Digest.Pure.SHA (showDigest, sha1)
 import System.Environment
 import Control.Monad (unless, when, (<=<))
-import qualified Control.Exception as E
 import Data.List (isInfixOf)
 import Data.Maybe (fromMaybe)
 import qualified Text.Pandoc.UTF8 as UTF8
@@ -56,7 +55,7 @@ import Text.Pandoc.Options (WriterOptions(..), HTMLMathMethod(..))
 import Text.Pandoc.MIME (extensionFromMimeType, getMimeType)
 import Text.Pandoc.Process (pipeProcess)
 import qualified Data.ByteString.Lazy as BL
-import qualified Codec.Picture as JP
+-- import qualified Codec.Picture as JP
 #ifdef _WINDOWS
 import Data.List (intercalate)
 #endif
@@ -146,20 +145,15 @@ convertImages _ x = return x
 
 -- Convert formats which do not work well in pdf to png
 convertImage :: FilePath -> FilePath -> IO (Either String FilePath)
-convertImage tmpdir fname =
+convertImage _ fname =
   case mime of
     Just "image/png" -> doNothing
     Just "image/jpeg" -> doNothing
     Just "application/pdf" -> doNothing
-    _ -> JP.readImage fname >>= \res ->
-          case res of
-               Left _    -> return $ Left $ "Unable to convert `" ++
+    _ -> return $ Left $ "Unable to convert `" ++
                                fname ++ "' for use with pdflatex."
-               Right img ->
-                 E.catch (Right fileOut <$ JP.savePngImage fileOut img) $
-                     \(e :: E.SomeException) -> return (Left (show e))
+
   where
-    fileOut = replaceDirectory (replaceExtension fname ".png") tmpdir
     mime = getMimeType fname
     doNothing = return (Right fname)
 
