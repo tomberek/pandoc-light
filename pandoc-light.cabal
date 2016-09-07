@@ -126,7 +126,6 @@ Library
                    Text.Pandoc.Writers.Shared,
                    Text.Pandoc.Asciify,
                    Text.Pandoc.MIME,
-                   Text.Pandoc.Emoji,
                    Text.Pandoc.Parsing,
                    Text.Pandoc.ImageSize,
                    Text.Pandoc.Compat.Time,
