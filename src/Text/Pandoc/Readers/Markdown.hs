@@ -34,12 +34,10 @@ module Text.Pandoc.Readers.Markdown ( readMarkdown,
 
 import Data.List ( transpose, sortBy, findIndex, intersperse, intercalate )
 import qualified Data.Map as M
-import Data.Scientific (coefficient, base10Exponent)
 import Data.Ord ( comparing )
-import Data.Char ( isSpace, isAlphaNum, toLower, isPunctuation )
+import Data.Char ( isSpace, isAlphaNum, toLower)
 import Data.Maybe
 import Text.Pandoc.Definition
-import Text.Pandoc.Emoji (emojis)
 import Text.Pandoc.Generic (bottomUp)
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -311,8 +309,6 @@ yamlToMeta :: ReaderOptions -> Yaml.Value -> Either PandocError MetaValue
 yamlToMeta opts (Yaml.String t) = toMetaValue opts t
 yamlToMeta _    (Yaml.Number n)
   -- avoid decimal points for numbers that don't need them:
-  | base10Exponent n >= 0     = return $ MetaString $ show
-                                $ coefficient n * (10 ^ base10Exponent n)
   | otherwise                 = return $ MetaString $ show n
 yamlToMeta _    (Yaml.Bool b) = return $ MetaBool b
 yamlToMeta opts (Yaml.Array xs) = B.toMetaValue <$> mapM (yamlToMeta opts)
@@ -496,7 +492,6 @@ block = do
                , htmlBlock
                , table
                , codeBlockIndented
-               , guardEnabled Ext_latex_macros *> (macro >>= return . return)
                , rawTeXBlock
                , lineBlock
                , blockQuote
@@ -1484,7 +1479,6 @@ inline = choice [ whitespace
                 , cite
                 , link
                 , image
-                , math
                 , strikeout
                 , subscript
                 , superscript
@@ -1497,7 +1491,6 @@ inline = choice [ whitespace
                 , exampleRef
                 , smart
                 , return . B.singleton <$> charRef
-                , emoji
                 , symbol
                 , ltSign
                 ] <?> "inline"
@@ -1555,12 +1548,6 @@ code = try $ do
   attr <- option ([],[],[]) (try $ guardEnabled Ext_inline_code_attributes >>
                                    optional whitespace >> attributes)
   return $ return $ B.codeWith attr $ trim $ concat result
-
-math :: MarkdownParser (F Inlines)
-math =  (return . B.displayMath <$> (mathDisplay >>= applyMacros'))
-     <|> (return . B.math <$> (mathInline >>= applyMacros')) <+?>
-               ((getOption readerSmart >>= guard) *> (return <$> apostrophe)
-                <* notFollowedBy (space <|> satisfy isPunctuation))
 
 -- Parses material enclosed in *s, **s, _s, or __s.
 -- Designed to avoid backtracking.
@@ -1930,21 +1917,6 @@ rawHtmlInline = do
                                          not (isCloseBlockTag x))
                              else not . isTextTag
   return $ return $ B.rawInline "html" result
-
--- Emoji
-
-emojiChars :: [Char]
-emojiChars = ['a'..'z'] ++ ['0'..'9'] ++ ['_','+','-']
-
-emoji :: MarkdownParser (F Inlines)
-emoji = try $ do
-  guardEnabled Ext_emoji
-  char ':'
-  emojikey <- many1 (oneOf emojiChars)
-  char ':'
-  case M.lookup emojikey emojis of
-       Just s  -> return (return (B.str s))
-       Nothing -> mzero
 
 -- Citations
 

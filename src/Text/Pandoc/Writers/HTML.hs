@@ -37,10 +37,8 @@ import Text.Pandoc.Writers.Shared
 import Text.Pandoc.Options
 import Text.Pandoc.ImageSize
 import Text.Pandoc.Templates
-import Text.Pandoc.Readers.TeXMath
 import Text.Pandoc.XML (fromEntities, escapeStringForXML)
 import Network.URI ( parseURIReference, URI(..), unEscapeString )
-import Network.HTTP ( urlEncode )
 import Numeric ( showHex )
 import Data.Char ( ord, toLower )
 import Data.List ( isPrefixOf, intersperse )
@@ -60,16 +58,11 @@ import qualified Text.Blaze.Html5 as H5
 import qualified Text.Blaze.XHtml1.Transitional as H
 import qualified Text.Blaze.XHtml1.Transitional.Attributes as A
 import Text.Blaze.Renderer.String (renderHtml)
-import Text.TeXMath
-import Text.XML.Light.Output
-import Text.XML.Light (unode, elChildren, unqual)
-import qualified Text.XML.Light as XML
 import System.FilePath (takeExtension)
 import Data.Aeson (Value)
 
 data WriterState = WriterState
     { stNotes            :: [Html]  -- ^ List of notes
-    , stMath             :: Bool    -- ^ Math is used in document
     , stQuotes           :: Bool    -- ^ <q> tag is used
     , stHighlighting     :: Bool    -- ^ Syntax highlighting is used
     , stSecNum           :: [Int]   -- ^ Number of current section
@@ -77,7 +70,7 @@ data WriterState = WriterState
     }
 
 defaultWriterState :: WriterState
-defaultWriterState = WriterState {stNotes= [], stMath = False, stQuotes = False,
+defaultWriterState = WriterState {stNotes= [], stQuotes = False,
                                   stHighlighting = False, stSecNum = [],
                                   stElement = False}
 
@@ -147,42 +140,7 @@ pandocToHtml opts (Pandoc meta blocks) = do
   st <- get
   let notes = reverse (stNotes st)
   let thebody = blocks' >> footnoteSection opts notes
-  let  math = case writerHTMLMathMethod opts of
-                      LaTeXMathML (Just url) ->
-                         H.script ! A.src (toValue url)
-                                  ! A.type_ "text/javascript"
-                                  $ mempty
-                      MathML (Just url) ->
-                         H.script ! A.src (toValue url)
-                                  ! A.type_ "text/javascript"
-                                  $ mempty
-                      MathJax url ->
-                         H.script ! A.src (toValue url)
-                                  ! A.type_ "text/javascript"
-                                  $ case writerSlideVariant opts of
-                                         SlideousSlides ->
-                                            preEscapedString
-                                            "MathJax.Hub.Queue([\"Typeset\",MathJax.Hub]);"
-                                         _ -> mempty
-                      JsMath (Just url) ->
-                         H.script ! A.src (toValue url)
-                                  ! A.type_ "text/javascript"
-                                  $ mempty
-                      KaTeX js css ->
-                         (H.script ! A.src (toValue js) $ mempty) <>
-                         (H.link ! A.rel "stylesheet" ! A.href (toValue css)) <>
-                         (H.script ! A.type_ "text/javascript" $ toHtml renderKaTeX)
-                      _ -> case lookup "mathml-script" (writerVariables opts) of
-                                 Just s | not (writerHtml5 opts) ->
-                                   H.script ! A.type_ "text/javascript"
-                                      $ preEscapedString
-                                       ("/*<![CDATA[*/\n" ++ s ++ "/*]]>*/\n")
-                                        | otherwise -> mempty
-                                 Nothing -> mempty
-  let context =   (if stMath st
-                      then defField "math" (renderHtml math)
-                      else id) $
-                  defField "quotes" (stQuotes st) $
+  let context =   defField "quotes" (stQuotes st) $
                   maybe id (defField "toc" . renderHtml) toc $
                   defField "author-meta" authsMeta $
                   maybe id (defField "date-meta") (normalizeDate dateMeta) $
@@ -484,11 +442,8 @@ blockToHtml opts (Div attr@(ident, classes, kvs) bs) = do
                   NoSlides       -> addAttrs opts' attr $ H.div $ contents'
                   _              -> mempty
         else addAttrs opts (ident, classes', kvs) $ divtag $ contents'
-blockToHtml opts (RawBlock f str)
+blockToHtml _ (RawBlock f str)
   | f == Format "html" = return $ preEscapedString str
-  | (f == Format "latex" || f == Format "tex") &&
-     allowsMathEnvironments (writerHTMLMathMethod opts) &&
-     isMathEnvironment str = blockToHtml opts $ Plain [Math DisplayMath str]
   | otherwise          = return mempty
 blockToHtml opts (HorizontalRule) = return $ if writerHtml5 opts then H5.hr else H.hr
 blockToHtml opts (CodeBlock (id',classes,keyvals) rawCode) = do
@@ -672,20 +627,6 @@ inlineListToHtml :: WriterOptions -> [Inline] -> State WriterState Html
 inlineListToHtml opts lst =
   mapM (inlineToHtml opts) lst >>= return . mconcat
 
--- | Annotates a MathML expression with the tex source
-annotateMML :: XML.Element -> String -> XML.Element
-annotateMML e tex = math (unode "semantics" [cs, unode "annotation" (annotAttrs, tex)])
-  where
-    cs = case elChildren e of
-          [] -> unode "mrow" ()
-          [x] -> x
-          xs -> unode "mrow" xs
-    math childs = XML.Element q as [XML.Elem childs] l
-      where
-        (XML.Element q as _ l) = e
-    annotAttrs = [XML.Attr (unqual "encoding") "application/x-tex"]
-
-
 -- | Convert Pandoc inline element to HTML.
 inlineToHtml :: WriterOptions -> Inline -> State WriterState Html
 inlineToHtml opts inline =
@@ -743,65 +684,6 @@ inlineToHtml opts inline =
                                  H.q `fmap` inlineListToHtml opts lst
                                else (\x -> leftQuote >> x >> rightQuote)
                                     `fmap` inlineListToHtml opts lst
-    (Math t str) -> do
-      modify (\st -> st {stMath = True})
-      let mathClass = toValue $ ("math " :: String) ++
-                      if t == InlineMath then "inline" else "display"
-      case writerHTMLMathMethod opts of
-           LaTeXMathML _ ->
-              -- putting LaTeXMathML in container with class "LaTeX" prevents
-              -- non-math elements on the page from being treated as math by
-              -- the javascript
-              return $ H.span ! A.class_ "LaTeX" $
-                     case t of
-                       InlineMath  -> toHtml ("$" ++ str ++ "$")
-                       DisplayMath -> toHtml ("$$" ++ str ++ "$$")
-           JsMath _ -> do
-              let m = preEscapedString str
-              return $ case t of
-                       InlineMath -> H.span ! A.class_ mathClass $ m
-                       DisplayMath -> H.div ! A.class_ mathClass $ m
-           WebTeX url -> do
-              let imtag = if writerHtml5 opts then H5.img else H.img
-              let m = imtag ! A.style "vertical-align:middle"
-                            ! A.src (toValue $ url ++ urlEncode str)
-                            ! A.alt (toValue str)
-                            ! A.title (toValue str)
-              let brtag = if writerHtml5 opts then H5.br else H.br
-              return $ case t of
-                        InlineMath  -> m
-                        DisplayMath -> brtag >> m >> brtag
-           GladTeX ->
-              return $ case t of
-                         InlineMath -> preEscapedString $ "<EQ ENV=\"math\">" ++ str ++ "</EQ>"
-                         DisplayMath -> preEscapedString $ "<EQ ENV=\"displaymath\">" ++ str ++ "</EQ>"
-           MathML _ -> do
-              let dt = if t == InlineMath
-                          then DisplayInline
-                          else DisplayBlock
-              let conf = useShortEmptyTags (const False)
-                           defaultConfigPP
-              case writeMathML dt <$> readTeX str of
-                    Right r  -> return $ preEscapedString $
-                        ppcElement conf (annotateMML r str)
-                    Left _   -> inlineListToHtml opts
-                        (texMathToInlines t str) >>=
-                        return .  (H.span ! A.class_ mathClass)
-           MathJax _ -> return $ H.span ! A.class_ mathClass $ toHtml $
-              case t of
-                InlineMath  -> "\\(" ++ str ++ "\\)"
-                DisplayMath -> "\\[" ++ str ++ "\\]"
-           KaTeX _ _ -> return $ H.span ! A.class_ mathClass $
-              toHtml (case t of
-                        InlineMath -> str
-                        DisplayMath -> "\\displaystyle " ++ str)
-           PlainMath -> do
-              x <- inlineListToHtml opts (texMathToInlines t str)
-              let m = H.span ! A.class_ mathClass $ x
-              let brtag = if writerHtml5 opts then H5.br else H.br
-              return  $ case t of
-                         InlineMath  -> m
-                         DisplayMath -> brtag >> m >> brtag
     (RawInline f str)
       | f == Format "html" -> return $ preEscapedString str
       | otherwise          -> return mempty
@@ -889,52 +771,3 @@ blockListToNote opts ref blocks =
                               Just EPUB3 -> noteItem ! customAttribute "epub:type" "footnote"
                               _          -> noteItem
          return $ nl opts >> noteItem'
-
--- Javascript snippet to render all KaTeX elements
-renderKaTeX :: String
-renderKaTeX = unlines [
-    "window.onload = function(){var mathElements = document.getElementsByClassName(\"math\");"
-  , "for (var i=0; i < mathElements.length; i++)"
-  , "{"
-  , " var texText = mathElements[i].firstChild"
-  , " katex.render(texText.data, mathElements[i])"
-  , "}}"
-  ]
-
-isMathEnvironment :: String -> Bool
-isMathEnvironment s = "\\begin{" `isPrefixOf` s &&
-                         envName `elem` mathmlenvs
-  where envName = takeWhile (/= '}') (drop 7 s)
-        mathmlenvs = [ "align"
-                     , "align*"
-                     , "alignat"
-                     , "alignat*"
-                     , "aligned"
-                     , "alignedat"
-                     , "array"
-                     , "Bmatrix"
-                     , "bmatrix"
-                     , "cases"
-                     , "CD"
-                     , "eqnarray"
-                     , "eqnarray*"
-                     , "equation"
-                     , "equation*"
-                     , "gather"
-                     , "gather*"
-                     , "gathered"
-                     , "matrix"
-                     , "multline"
-                     , "multline*"
-                     , "pmatrix"
-                     , "smallmatrix"
-                     , "split"
-                     , "subarray"
-                     , "Vmatrix"
-                     , "vmatrix" ]
-
-allowsMathEnvironments :: HTMLMathMethod -> Bool
-allowsMathEnvironments (MathJax _) = True
-allowsMathEnvironments (MathML _)  = True
-allowsMathEnvironments (WebTeX _)  = True
-allowsMathEnvironments _           = False

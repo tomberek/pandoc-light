@@ -39,8 +39,7 @@ import Text.Pandoc.Definition
 import Text.Pandoc.Walk
 import Text.Pandoc.Shared
 import Text.Pandoc.Options
-import Text.Pandoc.Parsing hiding ((<|>), many, optional, space,
-                                   mathDisplay, mathInline)
+import Text.Pandoc.Parsing hiding ((<|>), many, optional, space)
 import qualified Text.Pandoc.UTF8 as UTF8
 import Data.Char ( chr, ord, isLetter, isAlphaNum )
 import Control.Monad.Trans (lift)
@@ -158,26 +157,6 @@ braced = bgroup *> (concat <$> manyTill
 bracketed :: Monoid a => LP a -> LP a
 bracketed parser = try $ char '[' *> (mconcat <$> manyTill parser (char ']'))
 
-mathDisplay :: LP String -> LP Inlines
-mathDisplay p = displayMath <$> (try p >>= applyMacros' . trim)
-
-mathInline :: LP String -> LP Inlines
-mathInline p = math <$> (try p >>= applyMacros')
-
-mathChars :: LP String
-mathChars =
-  concat <$> many (escapedChar
-               <|> (snd <$> withRaw braced)
-               <|> many1 (satisfy isOrdChar))
-   where escapedChar = try $ do char '\\'
-                                c <- anyChar
-                                return ['\\',c]
-         isOrdChar '$' = False
-         isOrdChar '{' = False
-         isOrdChar '}' = False
-         isOrdChar '\\' = False
-         isOrdChar _ = True
-
 quoted' :: (Inlines -> Inlines) -> LP String -> LP () -> LP Inlines
 quoted' f starter ender = do
   startchs <- starter
@@ -226,8 +205,6 @@ inline = (mempty <$ comment)
      <|> (str "’" <$ char '\'')
      <|> (str "’" <$ char '’')
      <|> (str "\160" <$ char '~')
-     <|> mathDisplay (string "$$" *> mathChars <* string "$$")
-     <|> mathInline  (char '$' *> mathChars <* char '$')
      <|> (guardEnabled Ext_literate_haskell *> char '|' *> doLHSverb)
      <|> (str . (:[]) <$> tildeEscape)
      <|> (str . (:[]) <$> oneOf "[]")
@@ -250,7 +227,6 @@ block :: LP Blocks
 block = (mempty <$ comment)
     <|> (mempty <$ ((spaceChar <|> newline) *> spaces))
     <|> environment
-    <|> macro
     <|> blockCommand
     <|> paragraph
     <|> grouped block
@@ -280,10 +256,8 @@ blockCommand = try $ do
   let name' = name ++ star
   let raw = do
         rawcommand <- getRawCommand name'
-        transformed <- applyMacros' rawcommand
-        guard $ transformed /= rawcommand
-        notFollowedBy $ parseFromString inlines transformed
-        parseFromString blocks transformed
+        notFollowedBy $ parseFromString inlines rawcommand
+        parseFromString blocks rawcommand
   lookupListDefault raw [name',name] blockCommands
 
 inBrackets :: Inlines -> Inlines
@@ -423,12 +397,9 @@ inlineCommand = try $ do
   let raw = do
         rawargs <- withRaw (skipopts *> option "" dimenarg *> many braced)
         let rawcommand = '\\' : name ++ star ++ snd rawargs
-        transformed <- applyMacros' rawcommand
-        if transformed /= rawcommand
-           then parseFromString inlines transformed
-           else if parseRaw
-                   then return $ rawInline "latex" rawcommand
-                   else return mempty
+        if parseRaw
+             then return $ rawInline "latex" rawcommand
+             else return mempty
   (lookupListDefault mzero [name',name] inlineCommands <*
       optional (try (string "{}")))
     <|> raw
@@ -439,24 +410,8 @@ unlessParseRaw = getOption readerParseRaw >>= guard . not
 isBlockCommand :: String -> Bool
 isBlockCommand s = s `M.member` blockCommands
 
-
 inlineEnvironments :: M.Map String (LP Inlines)
-inlineEnvironments = M.fromList
-  [ ("displaymath", mathEnv id Nothing "displaymath")
-  , ("math", math <$> verbEnv "math")
-  , ("equation", mathEnv id Nothing "equation")
-  , ("equation*", mathEnv id Nothing "equation*")
-  , ("gather", mathEnv id (Just "gathered") "gather")
-  , ("gather*", mathEnv id (Just "gathered") "gather*")
-  , ("multline", mathEnv id (Just "gathered") "multline")
-  , ("multline*", mathEnv id (Just "gathered") "multline*")
-  , ("eqnarray", mathEnv id (Just "aligned") "eqnarray")
-  , ("eqnarray*", mathEnv id (Just "aligned") "eqnarray*")
-  , ("align", mathEnv id (Just "aligned") "align")
-  , ("align*", mathEnv id (Just "aligned") "align*")
-  , ("alignat", mathEnv id (Just "aligned") "alignat")
-  , ("alignat*", mathEnv id (Just "aligned") "alignat*")
-  ]
+inlineEnvironments = M.fromList []
 
 inlineCommands :: M.Map String (LP Inlines)
 inlineCommands = M.fromList $
@@ -482,9 +437,6 @@ inlineCommands = M.fromList $
   , ("textgreek", tok)
   , ("sep", lit ",")
   , ("cref", unlessParseRaw >> (inBrackets <$> tok))  -- from cleveref.sty
-  , ("(", mathInline $ manyTill anyChar (try $ string "\\)"))
-  , ("[", mathDisplay $ manyTill anyChar (try $ string "\\]"))
-  , ("ensuremath", mathInline braced)
   , ("texorpdfstring", (\_ x -> x) <$> tok <*> tok)
   , ("P", lit "¶")
   , ("S", lit "§")
@@ -893,7 +845,7 @@ rawEnv name = do
   let addBegin x = "\\begin{" ++ name ++ "}" ++ rawOptions ++ x
   if parseRaw
      then (rawBlock "latex" . addBegin) <$>
-            (withRaw (env name blocks) >>= applyMacros' . snd)
+            (withRaw (env name blocks) >>= return . snd)
      else env name blocks
 
 ----
@@ -1041,7 +993,7 @@ rawLaTeXBlock = snd <$> try (withRaw (environment <|> blockCommand))
 rawLaTeXInline :: LP Inline
 rawLaTeXInline = do
   raw <- (snd <$> withRaw inlineCommand) <|> (snd <$> withRaw blockCommand)
-  RawInline "latex" <$> applyMacros' raw
+  RawInline "latex" <$> return raw
 
 addImageCaption :: Blocks -> LP Blocks
 addImageCaption = walkM go
@@ -1117,19 +1069,6 @@ environments = M.fromList
   , ("obeylines", parseFromString
                   (para . trimInlines . mconcat <$> many inline) =<<
                   intercalate "\\\\\n" . lines <$> verbEnv "obeylines")
-  , ("displaymath", mathEnv para Nothing "displaymath")
-  , ("equation", mathEnv para Nothing "equation")
-  , ("equation*", mathEnv para Nothing "equation*")
-  , ("gather", mathEnv para (Just "gathered") "gather")
-  , ("gather*", mathEnv para (Just "gathered") "gather*")
-  , ("multline", mathEnv para (Just "gathered") "multline")
-  , ("multline*", mathEnv para (Just "gathered") "multline*")
-  , ("eqnarray", mathEnv para (Just "aligned") "eqnarray")
-  , ("eqnarray*", mathEnv para (Just "aligned") "eqnarray*")
-  , ("align", mathEnv para (Just "aligned") "align")
-  , ("align*", mathEnv para (Just "aligned") "align*")
-  , ("alignat", mathEnv para (Just "aligned") "alignat")
-  , ("alignat*", mathEnv para (Just "aligned") "alignat*")
   ]
 
 letterContents :: LP Blocks
@@ -1189,13 +1128,6 @@ listenv name p = try $ do
   updateState $ \st -> st{ stateParserContext = oldCtx }
   return res
 
-mathEnv :: (Inlines -> a) -> Maybe String -> String -> LP a
-mathEnv f innerEnv name = f <$> mathDisplay (inner <$> verbEnv name)
-   where inner x = case innerEnv of
-                      Nothing -> x
-                      Just y  -> "\\begin{" ++ y ++ "}\n" ++ x ++
-                                    "\\end{" ++ y ++ "}"
-
 verbEnv :: String -> LP String
 verbEnv name = do
   skipopts
@@ -1234,7 +1166,6 @@ preamble = mempty <$> manyTill preambleBlock beginDoc
         preambleBlock =  void comment
                      <|> void sp
                      <|> void blanklines
-                     <|> void macro
                      <|> void blockCommand
                      <|> void anyControlSeq
                      <|> void braced

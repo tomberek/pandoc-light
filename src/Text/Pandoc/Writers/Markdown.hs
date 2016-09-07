@@ -46,7 +46,6 @@ import Data.Ord ( comparing )
 import Text.Pandoc.Pretty
 import Control.Monad.State
 import Text.Pandoc.Writers.HTML (writeHtmlString)
-import Text.Pandoc.Readers.TeXMath (texMathToInlines)
 import Text.HTML.TagSoup (parseTags, isTagText, Tag(..))
 import Network.URI (isURI)
 import Data.Default
@@ -55,7 +54,6 @@ import qualified Data.HashMap.Strict as H
 import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Data.Set as Set
-import Network.HTTP ( urlEncode )
 
 type Notes = [[Block]]
 type Ref   = ([Inline], Target, Attr)
@@ -250,9 +248,6 @@ escapeString opts = escapeStringUsing markdownEscapes
                     else id) .
                 (if isEnabled Ext_subscript opts
                     then ('~':)
-                    else id) .
-                (if isEnabled Ext_tex_math_dollars opts
-                    then ('$':)
                     else id) $
                 "\\`*_[]#"
 
@@ -857,31 +852,6 @@ inlineToMarkdown opts (Str str) = do
   if stPlain st
      then return $ text str
      else return $ text $ escapeString opts str
-inlineToMarkdown opts (Math InlineMath str) =
-  case writerHTMLMathMethod opts of
-       WebTeX url ->
-             inlineToMarkdown opts (Image nullAttr [Str str]
-                 (url ++ urlEncode str, str))
-       _ | isEnabled Ext_tex_math_dollars opts ->
-             return $ "$" <> text str <> "$"
-         | isEnabled Ext_tex_math_single_backslash opts ->
-             return $ "\\(" <> text str <> "\\)"
-         | isEnabled Ext_tex_math_double_backslash opts ->
-             return $ "\\\\(" <> text str <> "\\\\)"
-         | otherwise -> do
-             plain <- gets stPlain
-             inlineListToMarkdown opts $
-               (if plain then makeMathPlainer else id) $
-               texMathToInlines InlineMath str
-inlineToMarkdown opts (Math DisplayMath str)
-  | isEnabled Ext_tex_math_dollars opts =
-      return $ "$$" <> text str <> "$$"
-  | isEnabled Ext_tex_math_single_backslash opts =
-      return $ "\\[" <> text str <> "\\]"
-  | isEnabled Ext_tex_math_double_backslash opts =
-      return $ "\\\\[" <> text str <> "\\\\]"
-  | otherwise = (\x -> cr <> x <> cr) `fmap`
-        inlineListToMarkdown opts (texMathToInlines DisplayMath str)
 inlineToMarkdown opts (RawInline f str) = do
   plain <- gets stPlain
   if not plain &&
@@ -995,9 +965,3 @@ inlineToMarkdown opts (Note contents) = do
   if isEnabled Ext_footnotes opts
      then return $ "[^" <> ref <> "]"
      else return $ "[" <> ref <> "]"
-
-makeMathPlainer :: [Inline] -> [Inline]
-makeMathPlainer = walk go
-  where
-  go (Emph xs) = Span nullAttr xs
-  go x = x

@@ -144,35 +144,11 @@ import Paths_pandoc_light (version)
 
 import Codec.Archive.Zip
 
-#ifdef EMBED_DATA_FILES
 import Text.Pandoc.Data (dataFiles)
-#else
-import Paths_pandoc_light (getDataFileName)
-#endif
-#ifdef HTTP_CLIENT
-import Network.HTTP.Client (httpLbs, responseBody, responseHeaders,
-                            Request(port,host))
-#if MIN_VERSION_http_client(0,4,30)
-import Network.HTTP.Client (parseRequest)
-#else
-import Network.HTTP.Client (parseUrl)
-#endif
-#if MIN_VERSION_http_client(0,4,18)
-import Network.HTTP.Client (newManager)
-#else
-import Network.HTTP.Client (withManager)
-#endif
-import Network.HTTP.Client.Internal (addProxy)
-import Network.HTTP.Client.TLS (tlsManagerSettings)
-import System.Environment (getEnv)
-import Network.HTTP.Types.Header ( hContentType)
-import Network (withSocketsDo)
-#else
 -- import Network.URI (parseURI)
 import Network.HTTP (findHeader, rspBody,
                      RequestMethod(..), HeaderName(..), mkRequest)
 import Network.Browser (browse, setAllowRedirects, setOutHandler, request)
-#endif
 
 -- | Version number of pandoc library.
 pandocVersion :: String
@@ -557,7 +533,6 @@ removeFormatting = query go . walk deNote
         go Space        = [Space]
         go SoftBreak    = [SoftBreak]
         go (Code _ x)   = [Str x]
-        go (Math _ x)   = [Str x]
         go LineBreak    = [Space]
         go _            = []
         deNote (Note _) = Str ""
@@ -573,7 +548,6 @@ stringify = query go . walk deNote
         go SoftBreak = " "
         go (Str x) = x
         go (Code _ x) = x
-        go (Math _ x) = x
         go (RawInline (Format "html") ('<':'b':'r':_)) = " " -- see #2105
         go LineBreak = " "
         go _ = ""

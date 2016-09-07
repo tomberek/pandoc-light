@@ -76,7 +76,6 @@ module Text.Pandoc.Parsing ( anyLine,
                              HasReaderOptions (..),
                              HasHeaderMap (..),
                              HasIdentifierList (..),
-                             HasMacros (..),
                              HasLastStrPosition (..),
                              defaultParserState,
                              HeaderType (..),
@@ -100,8 +99,6 @@ module Text.Pandoc.Parsing ( anyLine,
                              dash,
                              nested,
                              citeKey,
-                             macro,
-                             applyMacros',
                              Parser,
                              ParserT,
                              F(..),
@@ -171,7 +168,7 @@ where
 
 import Text.Pandoc.Definition
 import Text.Pandoc.Options
-import Text.Pandoc.Builder (Blocks, Inlines, rawBlock, HasMeta(..))
+import Text.Pandoc.Builder (Blocks, Inlines, HasMeta(..))
 import qualified Text.Pandoc.Builder as B
 import Text.Pandoc.XML (fromEntities)
 import qualified Text.Pandoc.UTF8 as UTF8 (putStrLn)
@@ -182,8 +179,6 @@ import Data.Char ( toLower, toUpper, ord, chr, isAscii, isAlphaNum,
 import Data.List ( intercalate, transpose, isSuffixOf )
 import Text.Pandoc.Shared
 import qualified Data.Map as M
-import Text.TeXMath.Readers.TeX.Macros (applyMacros, Macro,
-                                        parseMacroDefinitions)
 import Text.Pandoc.Compat.TagSoupEntity ( lookupEntity )
 import Text.Pandoc.Asciify (toAsciiChar)
 import Text.Pandoc.Compat.Monoid ((<>))
@@ -919,7 +914,6 @@ data ParserState = ParserState
       stateNextExample     :: Int,           -- ^ Number of next example
       stateExamples        :: M.Map String Int, -- ^ Map from example labels to numbers
       stateHasChapters     :: Bool,          -- ^ True if \chapter encountered
-      stateMacros          :: [Macro],       -- ^ List of macros defined so far
       stateRstDefaultRole  :: String,        -- ^ Current rST default interpreted text role
       stateRstCustomRoles  :: M.Map String (String, Maybe String, Attr), -- ^ Current rST custom text roles
       -- Triple represents: 1) Base role, 2) Optional format (only for :raw:
@@ -980,14 +974,6 @@ instance HasIdentifierList ParserState where
   extractIdentifierList     = stateIdentifiers
   updateIdentifierList f st = st{ stateIdentifiers = f $ stateIdentifiers st }
 
-class HasMacros st where
-  extractMacros         :: st -> [Macro]
-  updateMacros          :: ([Macro] -> [Macro]) -> st -> st
-
-instance HasMacros ParserState where
-  extractMacros        = stateMacros
-  updateMacros f st    = st{ stateMacros = f $ stateMacros st }
-
 class HasLastStrPosition st where
   setLastStrPos  :: SourcePos -> st -> st
   getLastStrPos  :: st -> Maybe SourcePos
@@ -1017,7 +1003,6 @@ defaultParserState =
                   stateNextExample     = 1,
                   stateExamples        = M.empty,
                   stateHasChapters     = False,
-                  stateMacros          = [],
                   stateRstDefaultRole  = "title-reference",
                   stateRstCustomRoles  = M.empty,
                   stateCaption         = Nothing,
@@ -1228,37 +1213,6 @@ token :: (Stream s m t)
       -> (t -> Maybe a)
       -> ParsecT s st m a
 token pp pos match = tokenPrim pp (\_ t _ -> pos t) match
-
---
--- Macros
---
-
--- | Parse a \newcommand or \renewcommand macro definition.
-macro :: (Stream [Char] m Char, HasMacros st, HasReaderOptions st)
-      => ParserT [Char] st m Blocks
-macro = do
-  apply <- getOption readerApplyMacros
-  inp <- getInput
-  case parseMacroDefinitions inp of
-       ([], _)    -> mzero
-       (ms, rest) -> do def' <- count (length inp - length rest) anyChar
-                        if apply
-                           then do
-                             updateState $ \st ->
-                               updateMacros (ms ++) st
-                             return mempty
-                           else return $ rawBlock "latex" def'
-
--- | Apply current macros to string.
-applyMacros' :: (HasReaderOptions st, HasMacros st, Stream [Char] m Char)
-             => String
-             -> ParserT [Char] st m String
-applyMacros' target = do
-  apply <- getOption readerApplyMacros
-  if apply
-     then do macros <- extractMacros <$> getState
-             return $ applyMacros macros target
-     else return target
 
 -- | Append a warning to the log.
 addWarning :: Maybe SourcePos -> String -> Parser [Char] ParserState ()

@@ -54,13 +54,12 @@ import qualified Data.Map as M
 import Data.Maybe ( fromMaybe, isJust)
 import Data.List ( intercalate, isInfixOf, isPrefixOf )
 import Data.Char ( isDigit )
-import Control.Monad ( guard, when, mzero, void, unless )
+import Control.Monad ( guard, when, mzero, void)
 import Control.Arrow ((***))
 import Control.Applicative ( (<|>) )
 import Data.Monoid (First (..))
 import Text.Printf (printf)
 import Debug.Trace (trace)
-import Text.TeXMath (readMathML, writeTeX)
 import Data.Default (Default (..), def)
 import Control.Monad.Reader (Reader,ask, asks, local, runReader)
 import Network.URI (URI, parseURIReference, nonStrictRelativeTo)
@@ -176,12 +175,6 @@ block = do
              (take 60 $ show $ B.toList res)) (return ())
   return res
 
-namespaces :: [(String, TagParser Inlines)]
-namespaces = [(mathMLNamespace, pMath True)]
-
-mathMLNamespace :: String
-mathMLNamespace = "http://www.w3.org/1998/Math/MathML"
-
 eSwitch :: Monoid a => (Inlines -> a) -> TagParser a -> TagParser a
 eSwitch constructor parser = try $ do
   guardEnabled Ext_epub_html_exts
@@ -198,10 +191,8 @@ eSwitch constructor parser = try $ do
 eCase :: TagParser (Maybe Inlines)
 eCase = do
   skipMany pBlank
-  TagOpen _ attr <- lookAhead $ pSatisfy $ (~== TagOpen "case" [])
-  case (flip lookup namespaces) =<< lookup "required-namespace" attr of
-    Just p -> Just <$> (pInTags "case" (skipMany pBlank *> p <* skipMany pBlank))
-    Nothing -> Nothing <$ manyTill pAnyTag (pSatisfy (~== TagClose "case"))
+  TagOpen _ _ <- lookAhead $ pSatisfy $ (~== TagOpen "case" [])
+  Nothing <$ manyTill pAnyTag (pSatisfy (~== TagClose "case"))
 
 eFootnote :: TagParser ()
 eFootnote = try $ do
@@ -531,7 +522,6 @@ inline = choice
            , pImage
            , pCode
            , pSpan
-           , pMath False
            , pRawHtmlInline
            ]
 
@@ -659,22 +649,6 @@ pRawHtmlInline = do
   if parseRaw
      then return $ B.rawInline "html" $ renderTags' [result]
      else return mempty
-
-mathMLToTeXMath :: String -> Either String String
-mathMLToTeXMath s = writeTeX <$> readMathML s
-
-pMath :: Bool -> TagParser Inlines
-pMath inCase = try $ do
-  open@(TagOpen _ attr) <- pSatisfy $ tagOpen (=="math") (const True)
-  unless (inCase) (guard (maybe False  (== mathMLNamespace) (lookup "xmlns" attr)))
-  contents <- manyTill pAnyTag (pSatisfy (~== TagClose "math"))
-  let math = mathMLToTeXMath $
-              (renderTags $ [open] ++ contents ++ [TagClose "math"])
-  let constructor =
-        maybe B.math (\x -> if (x == "inline") then B.math else B.displayMath)
-          (lookup "display" attr)
-  return $ either (const mempty)
-            (\x -> if null x then mempty else constructor x) math
 
 pInlinesInTags :: String -> (Inlines -> Inlines)
                -> TagParser Inlines
