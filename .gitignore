@@ -28,6 +28,4 @@ data/reference.odt
 *.jsexe
 .ghcjsi
 cabal.config
-default.nix
 ghcid.sh
-shell.nix
