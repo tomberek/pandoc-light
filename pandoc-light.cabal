@@ -35,17 +35,6 @@ Description:     Pandoc is a Haskell library for converting from one markup
                  format. Thus, adding an input or output format requires
                  only adding a reader or writer.
 
-  if flag(old-locale)
-    Data-Files:
-                 -- templates
-                 data/templates/default.html
-                 data/templates/default.html5
-                 data/templates/default.latex
-                 data/templates/default.context
-                 data/templates/default.markdown
-                 data/bash_completion.tpl
-                 -- documentation
-                 MANUAL.txt, COPYRIGHT
 Extra-Source-Files:
                  -- documentation
                  INSTALL, BUGS, README.md, CONTRIBUTING.md, changelog
@@ -53,6 +42,18 @@ Source-repository head
   type:          git
   location:      git://github.com/jgm/pandoc.git
 
+Executable pandoc-editor
+  Main-Is:       pandoc-editor.hs
+  default-language: Haskell2010
+  Build-Depends: base >= 4.2 && <5,
+                 pandoc-light == 1.17.2,
+                 ghcjs-prim >= 0.1.0.0,
+                 ghcjs-base >= 0.2.0.0,
+                 blaze-html >= 0.8.1.2,
+                 ghcjs-dom >= 0.2.3.1,
+                 text >= 1.2.2.1,
+                 transformers,
+                 Cabal >= 1.10
 Library
   Build-Depends: base >= 4.2 && <5,
                  syb >= 0.1 && < 0.7,

@@ -1,0 +1,70 @@
+From 3f394d5062e20440b48c58749d9fc362a4cc87da Mon Sep 17 00:00:00 2001
+From: Thomas Bereknyei <tomberek@gmail.com>
+Date: Thu, 8 Sep 2016 22:25:36 -0400
+Subject: [PATCH 1/1] pandoc-light: add
+
+---
+ default.nix  | 11 +++++++++++
+ packages.nix |  4 +++-
+ 2 files changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/default.nix b/default.nix
+index c1ed826..3493214 100644
+--- a/default.nix
++++ b/default.nix
+@@ -88,6 +88,7 @@ let overrideCabal = pkg: f: if pkg == null then null else lib.overrideCabal pkg
+         reflex = self.callPackage ./reflex {};
+         reflex-dom = self.callPackage ./reflex-dom {};
+         reflex-todomvc = self.callPackage ./reflex-todomvc {};
++        pandoc-light = self.callPackage ./pandoc-light {};
+ 
+         # Stick with the pre-gi gtk2hs for now
+         gtk2hs-buildtools = self.callPackage (cabal2nixResult "${sources.gtk2hs}/tools") {};
+@@ -147,8 +148,17 @@ let overrideCabal = pkg: f: if pkg == null then null else lib.overrideCabal pkg
+         statistics = dontHaddock super.statistics;
+ 
+         # Miscellaneous fixes
++        cmark = addBuildTools super.cmark (nixpkgs.pkgs.lib.optional nixpkgs.pkgs.stdenv.isDarwin nixpkgs.pkgs.libiconv);
++        network = addBuildTools super.network (nixpkgs.pkgs.lib.optional nixpkgs.pkgs.stdenv.isDarwin nixpkgs.pkgs.darwin.libiconv);
++        regex-posix = addBuildTools super.regex-posix (nixpkgs.pkgs.lib.optional nixpkgs.pkgs.stdenv.isDarwin nixpkgs.pkgs.libiconv);
++        digest = addBuildTools super.digest (nixpkgs.pkgs.lib.optional nixpkgs.pkgs.stdenv.isDarwin nixpkgs.pkgs.libiconv);
++        hslua = addBuildTools super.hslua (nixpkgs.pkgs.lib.optional nixpkgs.pkgs.stdenv.isDarwin nixpkgs.pkgs.libiconv);
++        memory = addBuildTools super.memory (nixpkgs.pkgs.lib.optional nixpkgs.pkgs.stdenv.isDarwin nixpkgs.pkgs.libiconv);
++        pcre-light = addBuildTools super.pcre-light (nixpkgs.pkgs.lib.optional nixpkgs.pkgs.stdenv.isDarwin nixpkgs.pkgs.libiconv);
++        terminal-size = addBuildTools super.terminal-size (nixpkgs.pkgs.lib.optional nixpkgs.pkgs.stdenv.isDarwin nixpkgs.pkgs.libiconv);
+         diagrams-svg = addBuildDepend (doJailbreak super.diagrams-svg) self.lucid-svg;
+         cereal = addBuildDepend super.cereal self.fail;
++        texmath = addBuildDepend super.texmath self.network-uri;
+         semigroups = addBuildDepends super.semigroups (with self; [
+           hashable
+           unordered-containers
+@@ -324,6 +334,7 @@ in rec {
+     nixpkgs.nodejs
+     nixpkgs.curl
+     nixpkgs.cabal2nix
++    nixpkgs.ncurses
+     nixpkgs.nix-prefetch-scripts
+     nativeHaskellPackages.cabal-install
+     nativeHaskellPackages.ghcid
+diff --git a/packages.nix b/packages.nix
+index 28f71d2..73b8a2c 100644
+--- a/packages.nix
++++ b/packages.nix
+@@ -8,11 +8,13 @@ with haskellPackages;
+   ##############################################################################
+   reflex
+   reflex-dom
+-  reflex-todomvc
++  pandoc-light
++  Cabal
+ 
+ ] ++ (if platform == "ghcjs" then [
+   ##############################################################################
+   # Add ghcjs-only packages here                                               #
++  pandoc-light
+   ##############################################################################
+ 
+ ] else []) ++ (if platform == "ghc" then [
+-- 
+2.7.4 (Apple Git-66)
+
