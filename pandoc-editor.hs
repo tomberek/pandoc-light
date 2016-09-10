@@ -30,16 +30,16 @@ main = do
     threadDelay $ 200 * 1000
     Just w <- currentWindow
     Just d <- currentDocument
-    Just edit <- getElementById d ("edit" :: String)
+    Just main <- getElementById d ("main" :: String)
     content <- getCodeMirrorContent
     converter_ content
-    edit `on` keyUp $ liftIO $ do
+    main `on` keyUp $ liftIO $ do
         content <- getCodeMirrorContent
         converter_ content
     return ()
 
 
-foreign import javascript unsafe "window.editor.getValue()"
+foreign import javascript unsafe "window.editor && window.editor.getValue()"
   getCodeMirrorContent :: IO JSVal
 
 {-
@@ -56,11 +56,13 @@ converter_ new = do
     case converter (Data.Text.pack $ GHCJS.Prim.fromJSString new) "test" of
       Just res -> do
           Just d <- currentDocument
-          Just preview <- getElementById d ("preview" :: String)
-          setInnerHTML preview (Just res :: Maybe String)
-          set_return $ Data.JSString.pack res
-
-      Nothing -> return ()
+          preview <- getElementById d ("preview" :: String)
+          case preview of
+            Just previewVis -> do
+              setInnerHTML previewVis (Just res :: Maybe String)
+              set_return $ Data.JSString.pack res
+            _ -> return ()
+      _ -> return ()
 
 foreign import javascript unsafe "js_callback_ = $1"
     set_callback :: Callback a -> IO ()
