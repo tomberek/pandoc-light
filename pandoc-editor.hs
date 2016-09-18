@@ -42,15 +42,6 @@ main = do
 foreign import javascript unsafe "window.editor.getValue()"
   getCodeMirrorContent :: IO JSVal
 
-{-
-wrapCallback c = do
-  cb <- syncCallback2 AlwaysRetain False $ \this x -> do
-    (Element res) <- runReaderT (c ^. render) this
-    setProp ("result" :: JSString) res x
-  w <- reactWrapCallback cb
-  return (w, cb)
--}
-
 converter_ :: JSVal -> IO ()
 converter_ new = do
     case converter (Data.Text.pack $ GHCJS.Prim.fromJSString new) "test" of
