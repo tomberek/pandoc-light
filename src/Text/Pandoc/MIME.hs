@@ -33,7 +33,7 @@ import System.FilePath
 import Data.Char ( toLower )
 import Data.List (isPrefixOf, isSuffixOf)
 import Data.Maybe (fromMaybe)
-import qualified Data.Map as M
+--import qualified Data.Map as M
 
 type MimeType = String
 
@@ -46,7 +46,7 @@ getMimeType fp
   | "Formula-" `isPrefixOf` fp && "/" `isSuffixOf` fp =
         Just "application/vnd.oasis.opendocument.formula"
   -- generic
-  | otherwise = M.lookup (map toLower $ drop 1 $ takeExtension fp) mimeTypes
+  | otherwise = lookup (map toLower $ drop 1 $ takeExtension fp) mimeTypes
 
 -- | Determime mime type appropriate for file path, defaulting to
 -- “application/octet-stream” if nothing else fits.
@@ -55,14 +55,14 @@ getMimeTypeDef = fromMaybe "application/octet-stream" . getMimeType
 
 extensionFromMimeType :: MimeType -> Maybe String
 extensionFromMimeType mimetype =
-  M.lookup (takeWhile (/=';') mimetype) reverseMimeTypes
+  lookup (takeWhile (/=';') mimetype) reverseMimeTypes
   -- note:  we just look up the basic mime type, dropping the content-encoding etc.
 
-reverseMimeTypes :: M.Map MimeType String
-reverseMimeTypes = M.fromList $ map (\(k,v) -> (v,k)) mimeTypesList
+reverseMimeTypes :: [(MimeType,String)]
+reverseMimeTypes = map (\(k,v) -> (v,k)) mimeTypesList
 
-mimeTypes :: M.Map String MimeType
-mimeTypes = M.fromList mimeTypesList
+mimeTypes :: [(String,MimeType)]
+mimeTypes = mimeTypesList
 
 mimeTypesList :: [(String, MimeType)]
 mimeTypesList = -- List borrowed from happstack-server.

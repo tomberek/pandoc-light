@@ -1938,6 +1938,7 @@ textualCite = try $ do
                       , citationNoteNum = 0
                       , citationHash    = 0
                       }
+
   mbrest <- option Nothing $ try $ spnl >> Just <$> withRaw normalCite
   case mbrest of
        Just (rest, raw) ->
@@ -1985,6 +1986,7 @@ normalCite = try $ do
   citations <- citeList
   spnl
   char ']'
+
   return citations
 
 suffix :: MarkdownParser (F Inlines)

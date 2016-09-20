@@ -7,7 +7,9 @@
 {-# LANGUAGE PartialTypeSignatures      #-}
 
 module Main where
-import Text.Pandoc
+import Text.Pandoc.Readers.Markdown (readMarkdown)
+import Text.Pandoc.Options (def,ReaderOptions(..))
+import Text.Pandoc.Writers.HTML (writeHtml)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Class (lift)
 -- import Control.Monad (void)

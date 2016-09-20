@@ -74,7 +74,7 @@ module Text.Pandoc.Pretty (
      )
 
 where
-import Data.Sequence (Seq, fromList, (<|), singleton, mapWithIndex, viewl, ViewL(..))
+-- import Data.Sequence (Seq, fromList, (<|), singleton, mapWithIndex, viewl, ViewL(..))
 import Data.Foldable (toList)
 import Data.List (intercalate)
 import Data.String
@@ -104,7 +104,7 @@ data D = Text Int String
        | BlankLines Int  -- number of blank lines
        deriving (Show)
 
-newtype Doc = Doc { unDoc :: Seq D }
+newtype Doc = Doc { unDoc :: [D] }
               deriving (Monoid, Show)
 
 instance IsString Doc where
@@ -190,15 +190,16 @@ vsep = foldr ($+$) empty
 -- | Removes leading blank lines from a 'Doc'.
 nestle :: Doc -> Doc
 nestle (Doc d) = Doc $ go d
-  where go x = case viewl x of
-               (BlankLines _ :< rest) -> go rest
-               (NewLine :< rest)   -> go rest
-               _                   -> x
+  where
+      go [] = []
+      go (BlankLines _:rest) = go rest
+      go (NewLine :rest) = go rest
+      go x = x
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
-chomp d = Doc (fromList dl')
-  where dl = toList (unDoc d)
+chomp d = Doc (dl')
+  where dl = (unDoc d)
         dl' = reverse $ go $ reverse dl
         go [] = []
         go (BreakingSpace : xs) = go xs
@@ -363,18 +364,20 @@ offsetOf _                = 0
 -- | A literal string.
 text :: String -> Doc
 text = Doc . toChunks
-  where toChunks :: String -> Seq D
+  where toChunks :: String -> [D]
         toChunks [] = mempty
         toChunks s = case break (=='\n') s of
-                          ([], _:ys) -> NewLine <| toChunks ys
-                          (xs, _:ys) -> Text (realLength xs) xs <|
-                                            (NewLine <| toChunks ys)
+                          ([], _:ys) -> NewLine : toChunks ys
+                          (xs, _:ys) -> Text (realLength xs) xs :
+                                            (NewLine : toChunks ys)
                           (xs, [])      -> singleton $ Text (realLength xs) xs
 
 -- | A character.
 char :: Char -> Doc
 char c = text [c]
 
+singleton :: a -> [a]
+singleton a = [a]
 -- | A breaking (reflowable) space.
 space :: Doc
 space = Doc $ singleton BreakingSpace
@@ -421,9 +424,9 @@ beforeNonBlank d = Doc $ singleton (BeforeNonBlank d)
 
 -- | Makes a 'Doc' non-reflowable.
 nowrap :: Doc -> Doc
-nowrap doc = Doc $ mapWithIndex replaceSpace $ unDoc doc
-  where replaceSpace _ BreakingSpace = Text 1 " "
-        replaceSpace _ x = x
+nowrap doc = Doc $ map replaceSpace $ unDoc doc
+  where replaceSpace  BreakingSpace = Text 1 " "
+        replaceSpace  x = x
 
 -- | Returns the width of a 'Doc'.
 offset :: Doc -> Int
