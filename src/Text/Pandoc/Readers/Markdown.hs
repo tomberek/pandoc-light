@@ -1939,6 +1939,7 @@ textualCite = try $ do
                       , citationHash    = 0
                       }
 
+
   mbrest <- option Nothing $ try $ spnl >> Just <$> withRaw normalCite
   case mbrest of
        Just (rest, raw) ->

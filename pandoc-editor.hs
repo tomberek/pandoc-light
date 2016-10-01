@@ -17,7 +17,7 @@ import Data.Text
 import Text.Blaze.Html.Renderer.String
 import GHCJS.Foreign.Callback
 import GHCJS.DOM.Document (load,getElementById)
-import GHCJS.DOM.Element (keyUp,setInnerHTML)
+import GHCJS.DOM.Element (change,keyUp,setInnerHTML)
 import GHCJS.DOM.EventM (on)
 import GHCJS.DOM (currentDocument,currentWindow)
 import GHCJS.Types (JSString,JSVal)
@@ -30,16 +30,17 @@ main = do
     callback <- syncCallback1 ContinueAsync converter_
     set_callback callback
     threadDelay $ 200 * 1000
-    Just w <- currentWindow
     Just d <- currentDocument
     Just edit <- getElementById d ("edit" :: String)
-    content <- getCodeMirrorContent
+    content <- getEditVal
     converter_ content
     edit `on` keyUp $ liftIO $ do
-        content <- getCodeMirrorContent
+        content <- getEditVal
         converter_ content
     return ()
 
+foreign import javascript unsafe "$('#edit').val()"
+  getEditVal :: IO JSVal
 
 foreign import javascript unsafe "window.editor.getValue()"
   getCodeMirrorContent :: IO JSVal
