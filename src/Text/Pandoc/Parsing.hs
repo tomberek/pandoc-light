@@ -3,7 +3,6 @@
 , GeneralizedNewtypeDeriving
 , TypeSynonymInstances
 , MultiParamTypeClasses
-, KindSignatures
 , FlexibleInstances #-}
 {-
 Copyright (C) 2006-2016 John MacFarlane <jgm@berkeley.edu>
@@ -173,16 +172,8 @@ import Text.Pandoc.Builder (Blocks, Inlines, HasMeta(..))
 import qualified Text.Pandoc.Builder as B
 import Text.Pandoc.XML (fromEntities)
 import qualified Text.Pandoc.UTF8 as UTF8 (putStrLn)
-    {-
-import Text.Parsec.Pos (newPos)
 import Text.Parsec hiding (token)
--}
-import Text.Parsec (ParsecT,SourcePos,Stream)
---import Data.Attoparsec hiding (Parser,token,take)
-import Data.Attoparsec.Text hiding (decimal,Parser,take,token)
-import Control.Applicative
-import qualified Data.Attoparsec as A
-
+import Text.Parsec.Pos (newPos)
 import Data.Char ( toLower, toUpper, ord, chr, isAscii, isAlphaNum,
                    isHexDigit, isSpace )
 import Data.List ( intercalate, transpose, isSuffixOf )
@@ -198,11 +189,10 @@ import Control.Monad.Identity
 import Data.Maybe (catMaybes)
 
 import Text.Pandoc.Error
-import Control.Monad.State
 
-type Parser t s = A.Parser
+type Parser t s = Parsec t s
 
-type ParserT s st (m:: * -> *)  b  = State st (A.Parser b)
+type ParserT = ParsecT
 
 newtype F a = F { unF :: Reader ParserState a } deriving (Monad, Applicative, Functor)
 
@@ -945,8 +935,7 @@ instance HasMeta ParserState where
 
 class HasReaderOptions st where
   extractReaderOptions :: st -> ReaderOptions
-  getOption            ::  -- (Stream s m t) =>
-              (ReaderOptions -> b) -> ParserT s st m b
+  getOption            :: (Stream s m t) => (ReaderOptions -> b) -> ParserT s st m b
   -- default
   getOption  f         = (f . extractReaderOptions) <$> getState
 

@@ -45,6 +45,7 @@ Source-repository head
 Executable pandoc-editor
   Main-Is:       pandoc-editor.hs
   default-language: Haskell2010
+  Ghc-Options:   -O2 -Wall -fno-warn-unused-do-bind -fwarn-unused-binds -fwarn-unused-imports
   if impl(ghcjs >= 0.2.1)
       ghcjs-options:     -dedupe -DGHCJS_BROWSER
   Build-Depends: base >= 4.2 && <5,
@@ -55,7 +56,8 @@ Executable pandoc-editor
                  ghcjs-dom >= 0.2.3.1,
                  text >= 1.2.2.1,
                  transformers,
-                 Cabal >= 1.10
+                 Cabal >= 1.10,
+                 auto-update >= 0.1.4
 Library
   Build-Depends: base >= 4.2 && <5,
                  syb >= 0.1 && < 0.7,
@@ -63,6 +65,8 @@ Library
                  unordered-containers >= 0.2 && < 0.3,
                  array >= 0.3 && < 0.6,
                  parsec >= 3.1 && < 3.2,
+                 attoparsec-parsec >= 0.1.3,
+                 attoparsec >= 0.13.0.0,
                  mtl >= 1.1 && < 2.3,
                  filepath >= 1.1 && < 1.5,
                  process >= 1 && < 1.5,
@@ -94,9 +98,9 @@ Library
                  network-uri >= 2.6 && < 2.7,
                  network >= 2.6
   cpp-options:   -DEMBED_DATA_FILES
-  Ghc-Options:   -Wall -fno-warn-unused-do-bind -fwarn-unused-binds -fwarn-unused-imports
+  Ghc-Options:   -O2 -Wall -fno-warn-unused-do-bind -fwarn-unused-binds -fwarn-unused-imports
   if impl(ghcjs >= 0.2.1)
-      ghcjs-options:     -dedupe
+      ghcjs-options:     -dedupe -DGHCJS_BROWSER
   Ghc-Prof-Options: -fprof-auto-exported
   Default-Language: Haskell98
   Other-Extensions:   PatternGuards, OverloadedStrings,
@@ -106,9 +110,11 @@ Library
   Hs-Source-Dirs:  src
   Exposed-Modules: 
                    Text.Pandoc.Readers.Markdown,
+                   Text.Pandoc.Readers.HTML,
                    -- Text.Pandoc,
                    Text.Pandoc.Options,
-                   Text.Pandoc.Writers.HTML
+                   Text.Pandoc.Writers.HTML,
+                   Text.Pandoc.Writers.Markdown
                    -- Text.Pandoc.Pretty, Text.Pandoc.Shared, Text.Pandoc.MediaBag, Text.Pandoc.Error, Text.Pandoc.Readers.HTML, Text.Pandoc.Readers.LaTeX, Text.Pandoc.Writers.Markdown,  Text.Pandoc.Writers.LaTeX Text.Pandoc.PDF, Text.Pandoc.UTF8, Text.Pandoc.Templates,
                    -- Text.Pandoc.XML,
                    -- Text.Pandoc.SelfContained, Text.Pandoc.Process, Text.Pandoc.CSS

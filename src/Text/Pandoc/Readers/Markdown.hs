@@ -53,7 +53,6 @@ import Text.Pandoc.Shared
 import Text.Pandoc.Pretty (charWidth)
 import Text.Pandoc.XML (fromEntities)
 import Text.Pandoc.Parsing hiding (tableWith)
-import Text.Pandoc.Readers.LaTeX ( rawLaTeXInline, rawLaTeXBlock )
 import Text.Pandoc.Readers.HTML ( htmlTag, htmlInBalanced, isInlineTag, isBlockTag,
                                   isTextTag, isCommentTag )
 import Control.Monad
@@ -492,7 +491,6 @@ block = do
                , htmlBlock
                , table
                , codeBlockIndented
-               , rawTeXBlock
                , lineBlock
                , blockQuote
                , hrule
@@ -700,17 +698,9 @@ lhsCodeBlock :: MarkdownParser (F Blocks)
 lhsCodeBlock = do
   guardEnabled Ext_literate_haskell
   (return . B.codeBlockWith ("",["sourceCode","literate","haskell"],[]) <$>
-          (lhsCodeBlockBird <|> lhsCodeBlockLaTeX))
+          (lhsCodeBlockBird))
     <|> (return . B.codeBlockWith ("",["sourceCode","haskell"],[]) <$>
           lhsCodeBlockInverseBird)
-
-lhsCodeBlockLaTeX :: MarkdownParser String
-lhsCodeBlockLaTeX = try $ do
-  string "\\begin{code}"
-  manyTill spaceChar newline
-  contents <- many1Till anyChar (try $ string "\\end{code}")
-  blanklines
-  return $ stripTrailingNewlines contents
 
 lhsCodeBlockBird :: MarkdownParser String
 lhsCodeBlockBird = lhsCodeBlockBirdWith '>'
@@ -1056,16 +1046,6 @@ rawVerbatimBlock = htmlInBalanced isVerbTag
         isVerbTag (TagOpen "script" _) = True
         isVerbTag _                    = False
 
-rawTeXBlock :: MarkdownParser (F Blocks)
-rawTeXBlock = do
-  guardEnabled Ext_raw_tex
-  result <- (B.rawBlock "latex" . concat <$>
-                  rawLaTeXBlock `sepEndBy1` blankline)
-        <|> (B.rawBlock "context" . concat <$>
-                  rawConTeXtEnvironment `sepEndBy1` blankline)
-  spaces
-  return $ return result
-
 rawHtmlBlocks :: MarkdownParser (F Blocks)
 rawHtmlBlocks = do
   (TagOpen tagtype _, raw) <- htmlTag isBlockTag
@@ -1378,7 +1358,7 @@ pipeTableRow = try $ do
   skipMany spaceChar
   openPipe <- (True <$ char '|') <|> return False
   -- split into cells
-  let chunk = void (code <|> rawHtmlInline <|> escapedChar <|> rawLaTeXInline')
+  let chunk = void (code <|> rawHtmlInline <|> escapedChar)
        <|> void (noneOf "|\n\r")
   let cellContents = ((trim . snd) <$> withRaw (many chunk)) >>=
         parseFromString pipeTableCell
@@ -1487,7 +1467,6 @@ inline = choice [ whitespace
                 , spanHtml
                 , rawHtmlInline
                 , escapedChar
-                , rawLaTeXInline'
                 , exampleRef
                 , smart
                 , return . B.singleton <$> charRef
@@ -1531,9 +1510,6 @@ exampleRef = try $ do
 symbol :: MarkdownParser (F Inlines)
 symbol = do
   result <- noneOf "<\\\n\t "
-         <|> try (do lookAhead $ char '\\'
-                     notFollowedBy' (() <$ rawTeXBlock)
-                     char '\\')
   return $ return $ B.str [result]
 
 -- parses inline code, between n `s and n `s
@@ -1839,23 +1815,6 @@ inlineNote = try $ do
   char '^'
   contents <- inlinesInBalancedBrackets
   return $ B.note . B.para <$> contents
-
-rawLaTeXInline' :: MarkdownParser (F Inlines)
-rawLaTeXInline' = try $ do
-  guardEnabled Ext_raw_tex
-  lookAhead $ char '\\' >> notFollowedBy' (string "start") -- context env
-  RawInline _ s <- rawLaTeXInline
-  return $ return $ B.rawInline "tex" s
-  -- "tex" because it might be context or latex
-
-rawConTeXtEnvironment :: Parser [Char] st String
-rawConTeXtEnvironment = try $ do
-  string "\\start"
-  completion <- inBrackets (letter <|> digit <|> spaceChar)
-               <|> (many1 letter)
-  contents <- manyTill (rawConTeXtEnvironment <|> (count 1 anyChar))
-                       (try $ string "\\stop" >> string completion)
-  return $ "\\start" ++ completion ++ concat contents ++ "\\stop" ++ completion
 
 inBrackets :: (Parser [Char] st Char) -> Parser [Char] st String
 inBrackets parser = do

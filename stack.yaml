@@ -1,6 +1,6 @@
 resolver: lts-7.1
-compiler: ghc-8.0.1
-# compiler: ghcjs-0.2.1.9007001_ghc-8.0.1
+# compiler: ghc-8.0.1
+compiler: ghcjs-0.2.1.9007001_ghc-8.0.1
 compiler-check: match-exact
 
 setup-info:
@@ -19,3 +19,5 @@ extra-deps:
 - ghcjs-dom-jsaddle-0.3.1.0
 - jsaddle-dom-0.2.0.1
 - jsaddle-0.4.0.5
+- ghcjs-dom-jsffi-0.3.1.0
+- attoparsec-parsec-0.1.3
