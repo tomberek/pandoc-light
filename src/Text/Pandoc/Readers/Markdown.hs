@@ -1,5 +1,8 @@
 {-# LANGUAGE RelaxedPolyRec #-} -- needed for inlinesBetween on GHC < 7
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 {-
 Copyright (C) 2006-2015 John MacFarlane <jgm@berkeley.edu>
 
@@ -63,6 +66,12 @@ import Text.Printf (printf)
 import Debug.Trace (trace)
 import Text.Pandoc.Compat.Monoid ((<>))
 import Text.Pandoc.Error
+-- Added by Tom
+import qualified Data.Functor.Identity
+import Text.Parsec.Prim
+import Text.Parsec.Error
+import System.IO.Unsafe
+import Data.IORef
 
 type MarkdownParser = Parser [Char] ParserState
 
@@ -475,11 +484,48 @@ noteBlock = try $ do
 parseBlocks :: MarkdownParser (F Blocks)
 parseBlocks = mconcat <$> manyTill block eof
 
+type Gen a = (a -> a)
+type Dict a b m = (a -> m (Maybe b), a -> b -> m ())
+memo :: Dict (State String ParserState) (a,State String ParserState) MarkdownParser -> Gen (MarkdownParser a)
+memo (check, store) super = do
+    a <- getParserState
+    b <- check a
+    case b of
+      Just (b,a') -> do
+                        updateParserState (\(State s sp u) -> State (drop 1 $ dropWhile ( /= '\n') s) sp u)
+                        return b
+      Nothing -> do b <- super
+                    a' <- getParserState
+                    () <- store a (b,a')
+                    return b
+
+mapDict :: (Ord a) => Dict a b MarkdownParser
+mapDict = (return . check, \a -> return . store a)
+
+{-# NOINLINE check #-}
+check a = unsafePerformIO $ do
+             m <- readIORef test
+             return $ (M.lookup a) m
+
+{-# NOINLINE store #-}
+store a b = unsafePerformIO $ do
+             m <- readIORef test
+             let m' = (M.insert a b) m
+             writeIORef test m'
+
+test :: IORef (M.Map a b)
+test = unsafePerformIO $ do
+    newIORef M.empty
+
+instance Ord (State String u) where
+    compare (State s sp u) (State s' sp' u') = compare (takeWhile (/= '\n') s) (takeWhile (/= '\n') s')
+instance Eq (State String u) where
+    (State s sp u) == (State s' sp' u') = (takeWhile (/= '\n') s) == (takeWhile ( /= '\n') s')
 block :: MarkdownParser (F Blocks)
 block = do
   tr <- getOption readerTrace
   pos <- getPosition
-  res <- choice [ mempty <$ blanklines
+  res <- memo mapDict (choice [ mempty <$ blanklines
                , codeBlockFenced
                , yamlMetaBlock
                -- note: bulletList needs to be before header because of
@@ -501,7 +547,7 @@ block = do
                , abbrevKey
                , para
                , plain
-               ] <?> "block"
+               ] <?> "block")
   when tr $ do
     st <- getState
     trace (printf "line %d: %s" (sourceLine pos)

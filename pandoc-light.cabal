@@ -58,6 +58,7 @@ Executable pandoc-editor
                  transformers,
                  Cabal >= 1.10,
                  auto-update >= 0.1.4
+
 Library
   Build-Depends: base >= 4.2 && <5,
                  syb >= 0.1 && < 0.7,

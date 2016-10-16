@@ -1,6 +1,6 @@
 resolver: lts-7.1
-# compiler: ghc-8.0.1
-compiler: ghcjs-0.2.1.9007001_ghc-8.0.1
+compiler: ghc-8.0.1
+# compiler: ghcjs-0.2.1.9007001_ghc-8.0.1
 compiler-check: match-exact
 
 setup-info:
@@ -14,7 +14,11 @@ nix:
   enable: false
 packages:
 - location: '.'
+  # - ./aplite
+  # - ./open-typerep
+  # - ./syntactic
 extra-deps:
+    # - operational-alacarte-0.1.1
 - ghcjs-dom-0.3.1.0
 - ghcjs-dom-jsaddle-0.3.1.0
 - jsaddle-dom-0.2.0.1

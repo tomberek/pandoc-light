@@ -31,57 +31,32 @@ import Control.Exception.Base
 
 main :: IO ()
 main = do
-    pandocToHtml' <- pandocToHtml
-    callback <- asyncCallback (catch pandocToHtml' (\e -> return $ const () (e :: BlockedIndefinitelyOnMVar)))
-    --callback <- asyncCallback1 ContinueAsync pandocToHtml
+    callback <- syncCallback1' pandocToHtml
     set_callback_html callback
-    callback' <- asyncCallback1 htmlToPandoc
-    --callback' <- asyncCallback1 ContinueAsync htmlToPandoc
-    set_callback_md callback'
-        {-
-    Just d <- currentDocument
-    Just edit <- getElementById d ("edit" :: String)
-    content <- getEditVal
-    converter_ content
-        edit `on` keyUp $ liftIO $ do
-        content <- getEditVal
-        converter_ content
-        -}
+
+    callback <- syncCallback1' htmlToPandoc
+    set_callback_markdown callback
     return ()
 
-foreign import javascript unsafe "$('#edit').val()"
-  getEditVal :: IO JSVal
-foreign import javascript unsafe "$('#preview').html($1)"
-  setPreviewVal :: JSString -> IO ()
-
-foreign import javascript unsafe "window.editor.getValue()"
-  getCodeMirrorContent :: IO JSVal
-
-pandocToHtml :: IO (IO ())
-pandocToHtml = mkAutoUpdate defaultUpdateSettings {
-    updateFreq = 200000,
-    updateAction = do
-    new <- getEditVal
-    case converter (GHCJS.Prim.fromJSString new) of
+pandocToHtml :: JSVal -> IO JSVal
+pandocToHtml content = do
+    let content' = GHCJS.Prim.fromJSString content
+    case converter content' of
       Just res -> do
-          setPreviewVal $ Data.JSString.pack res
-      Nothing -> return ()}
-
-htmlToPandoc :: JSVal -> IO ()
-htmlToPandoc new = do
-    case converter' (GHCJS.Prim.fromJSString new) of
+          return $ GHCJS.Prim.toJSString res
+      Nothing -> return $ GHCJS.Prim.toJSString "err"
+htmlToPandoc :: JSVal -> IO JSVal
+htmlToPandoc content = do
+    let content' = GHCJS.Prim.fromJSString content
+    case converter' content' of
       Just res -> do
-          set_return_md $ Data.JSString.pack res
-      Nothing -> return ()
+          return $ GHCJS.Prim.toJSString res
+      Nothing -> return $ GHCJS.Prim.toJSString "err"
 
 foreign import javascript unsafe "js_toHTML = $1"
-    set_callback_html :: Callback a -> IO ()
-foreign import javascript unsafe "js_ret_html = $1"
-    set_return_html :: JSString -> IO ()
+    set_callback_html :: (Callback (JSVal -> IO JSVal)) -> IO ()
 foreign import javascript unsafe "js_toMarkdown = $1"
-    set_callback_md :: Callback a -> IO ()
-foreign import javascript unsafe "js_ret_md = $1"
-    set_return_md :: JSString -> IO ()
+    set_callback_markdown :: (Callback (JSVal -> IO JSVal)) -> IO ()
 
 converter :: String -> Maybe String
 converter input = do
