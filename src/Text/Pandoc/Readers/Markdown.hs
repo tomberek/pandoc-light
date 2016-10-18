@@ -525,7 +525,7 @@ block :: MarkdownParser (F Blocks)
 block = do
   tr <- getOption readerTrace
   pos <- getPosition
-  res <- memo mapDict (choice [ mempty <$ blanklines
+  res <- (choice [ mempty <$ blanklines
                , codeBlockFenced
                , yamlMetaBlock
                -- note: bulletList needs to be before header because of

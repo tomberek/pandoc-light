@@ -52,13 +52,12 @@ Executable pandoc-editor
                  pandoc-light == 1.17.2,
                  ghcjs-prim >= 0.1.0.0,
                  ghcjs-base >= 0.2.0.0,
-                 blaze-html >= 0.8.1.2,
                  ghcjs-dom >= 0.2.3.1,
                  text >= 1.2.2.1,
                  transformers,
+                 xss-sanitize >= 0.3.0.0,
                  Cabal >= 1.10,
                  auto-update >= 0.1.4
-
 Library
   Build-Depends: base >= 4.2 && <5,
                  syb >= 0.1 && < 0.7,
