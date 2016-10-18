@@ -1,5 +1,8 @@
 {-# LANGUAGE RelaxedPolyRec #-} -- needed for inlinesBetween on GHC < 7
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 {-
 Copyright (C) 2006-2015 John MacFarlane <jgm@berkeley.edu>
 
@@ -53,7 +56,6 @@ import Text.Pandoc.Shared
 import Text.Pandoc.Pretty (charWidth)
 import Text.Pandoc.XML (fromEntities)
 import Text.Pandoc.Parsing hiding (tableWith)
-import Text.Pandoc.Readers.LaTeX ( rawLaTeXInline, rawLaTeXBlock )
 import Text.Pandoc.Readers.HTML ( htmlTag, htmlInBalanced, isInlineTag, isBlockTag,
                                   isTextTag, isCommentTag )
 import Control.Monad
@@ -64,6 +66,12 @@ import Text.Printf (printf)
 import Debug.Trace (trace)
 import Text.Pandoc.Compat.Monoid ((<>))
 import Text.Pandoc.Error
+-- Added by Tom
+import qualified Data.Functor.Identity
+import Text.Parsec.Prim
+import Text.Parsec.Error
+import System.IO.Unsafe
+import Data.IORef
 
 type MarkdownParser = Parser [Char] ParserState
 
@@ -476,11 +484,48 @@ noteBlock = try $ do
 parseBlocks :: MarkdownParser (F Blocks)
 parseBlocks = mconcat <$> manyTill block eof
 
+type Gen a = (a -> a)
+type Dict a b m = (a -> m (Maybe b), a -> b -> m ())
+memo :: Dict (State String ParserState) (a,State String ParserState) MarkdownParser -> Gen (MarkdownParser a)
+memo (check, store) super = do
+    a <- getParserState
+    b <- check a
+    case b of
+      Just (b,a') -> do
+                        updateParserState (\(State s sp u) -> State (drop 1 $ dropWhile ( /= '\n') s) sp u)
+                        return b
+      Nothing -> do b <- super
+                    a' <- getParserState
+                    () <- store a (b,a')
+                    return b
+
+mapDict :: (Ord a) => Dict a b MarkdownParser
+mapDict = (return . check, \a -> return . store a)
+
+{-# NOINLINE check #-}
+check a = unsafePerformIO $ do
+             m <- readIORef test
+             return $ (M.lookup a) m
+
+{-# NOINLINE store #-}
+store a b = unsafePerformIO $ do
+             m <- readIORef test
+             let m' = (M.insert a b) m
+             writeIORef test m'
+
+test :: IORef (M.Map a b)
+test = unsafePerformIO $ do
+    newIORef M.empty
+
+instance Ord (State String u) where
+    compare (State s sp u) (State s' sp' u') = compare (takeWhile (/= '\n') s) (takeWhile (/= '\n') s')
+instance Eq (State String u) where
+    (State s sp u) == (State s' sp' u') = (takeWhile (/= '\n') s) == (takeWhile ( /= '\n') s')
 block :: MarkdownParser (F Blocks)
 block = do
   tr <- getOption readerTrace
   pos <- getPosition
-  res <- choice [ mempty <$ blanklines
+  res <- (choice [ mempty <$ blanklines
                , codeBlockFenced
                , yamlMetaBlock
                -- note: bulletList needs to be before header because of
@@ -492,7 +537,6 @@ block = do
                , htmlBlock
                , table
                , codeBlockIndented
-               , rawTeXBlock
                , lineBlock
                , blockQuote
                , hrule
@@ -503,7 +547,7 @@ block = do
                , abbrevKey
                , para
                , plain
-               ] <?> "block"
+               ] <?> "block")
   when tr $ do
     st <- getState
     trace (printf "line %d: %s" (sourceLine pos)
@@ -700,17 +744,9 @@ lhsCodeBlock :: MarkdownParser (F Blocks)
 lhsCodeBlock = do
   guardEnabled Ext_literate_haskell
   (return . B.codeBlockWith ("",["sourceCode","literate","haskell"],[]) <$>
-          (lhsCodeBlockBird <|> lhsCodeBlockLaTeX))
+          (lhsCodeBlockBird))
     <|> (return . B.codeBlockWith ("",["sourceCode","haskell"],[]) <$>
           lhsCodeBlockInverseBird)
-
-lhsCodeBlockLaTeX :: MarkdownParser String
-lhsCodeBlockLaTeX = try $ do
-  string "\\begin{code}"
-  manyTill spaceChar newline
-  contents <- many1Till anyChar (try $ string "\\end{code}")
-  blanklines
-  return $ stripTrailingNewlines contents
 
 lhsCodeBlockBird :: MarkdownParser String
 lhsCodeBlockBird = lhsCodeBlockBirdWith '>'
@@ -1056,16 +1092,6 @@ rawVerbatimBlock = htmlInBalanced isVerbTag
         isVerbTag (TagOpen "script" _) = True
         isVerbTag _                    = False
 
-rawTeXBlock :: MarkdownParser (F Blocks)
-rawTeXBlock = do
-  guardEnabled Ext_raw_tex
-  result <- (B.rawBlock "latex" . concat <$>
-                  rawLaTeXBlock `sepEndBy1` blankline)
-        <|> (B.rawBlock "context" . concat <$>
-                  rawConTeXtEnvironment `sepEndBy1` blankline)
-  spaces
-  return $ return result
-
 rawHtmlBlocks :: MarkdownParser (F Blocks)
 rawHtmlBlocks = do
   (TagOpen tagtype _, raw) <- htmlTag isBlockTag
@@ -1378,7 +1404,7 @@ pipeTableRow = try $ do
   skipMany spaceChar
   openPipe <- (True <$ char '|') <|> return False
   -- split into cells
-  let chunk = void (code <|> rawHtmlInline <|> escapedChar <|> rawLaTeXInline')
+  let chunk = void (code <|> rawHtmlInline <|> escapedChar)
        <|> void (noneOf "|\n\r")
   let cellContents = ((trim . snd) <$> withRaw (many chunk)) >>=
         parseFromString pipeTableCell
@@ -1487,7 +1513,6 @@ inline = choice [ whitespace
                 , spanHtml
                 , rawHtmlInline
                 , escapedChar
-                , rawLaTeXInline'
                 , exampleRef
                 , smart
                 , return . B.singleton <$> charRef
@@ -1531,9 +1556,6 @@ exampleRef = try $ do
 symbol :: MarkdownParser (F Inlines)
 symbol = do
   result <- noneOf "<\\\n\t "
-         <|> try (do lookAhead $ char '\\'
-                     notFollowedBy' (() <$ rawTeXBlock)
-                     char '\\')
   return $ return $ B.str [result]
 
 -- parses inline code, between n `s and n `s
@@ -1840,23 +1862,6 @@ inlineNote = try $ do
   contents <- inlinesInBalancedBrackets
   return $ B.note . B.para <$> contents
 
-rawLaTeXInline' :: MarkdownParser (F Inlines)
-rawLaTeXInline' = try $ do
-  guardEnabled Ext_raw_tex
-  lookAhead $ char '\\' >> notFollowedBy' (string "start") -- context env
-  RawInline _ s <- rawLaTeXInline
-  return $ return $ B.rawInline "tex" s
-  -- "tex" because it might be context or latex
-
-rawConTeXtEnvironment :: Parser [Char] st String
-rawConTeXtEnvironment = try $ do
-  string "\\start"
-  completion <- inBrackets (letter <|> digit <|> spaceChar)
-               <|> (many1 letter)
-  contents <- manyTill (rawConTeXtEnvironment <|> (count 1 anyChar))
-                       (try $ string "\\stop" >> string completion)
-  return $ "\\start" ++ completion ++ concat contents ++ "\\stop" ++ completion
-
 inBrackets :: (Parser [Char] st Char) -> Parser [Char] st String
 inBrackets parser = do
   char '['
@@ -1938,6 +1943,8 @@ textualCite = try $ do
                       , citationNoteNum = 0
                       , citationHash    = 0
                       }
+
+
   mbrest <- option Nothing $ try $ spnl >> Just <$> withRaw normalCite
   case mbrest of
        Just (rest, raw) ->
@@ -1985,6 +1992,7 @@ normalCite = try $ do
   citations <- citeList
   spnl
   char ']'
+
   return citations
 
 suffix :: MarkdownParser (F Inlines)

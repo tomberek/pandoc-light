@@ -45,15 +45,19 @@ Source-repository head
 Executable pandoc-editor
   Main-Is:       pandoc-editor.hs
   default-language: Haskell2010
+  Ghc-Options:   -O2 -Wall -fno-warn-unused-do-bind -fwarn-unused-binds -fwarn-unused-imports
+  if impl(ghcjs >= 0.2.1)
+      ghcjs-options:     -dedupe -DGHCJS_BROWSER
   Build-Depends: base >= 4.2 && <5,
                  pandoc-light == 1.17.2,
                  ghcjs-prim >= 0.1.0.0,
                  ghcjs-base >= 0.2.0.0,
-                 blaze-html >= 0.8.1.2,
                  ghcjs-dom >= 0.2.3.1,
                  text >= 1.2.2.1,
                  transformers,
-                 Cabal >= 1.10
+                 xss-sanitize >= 0.3.0.0,
+                 Cabal >= 1.10,
+                 auto-update >= 0.1.4
 Library
   Build-Depends: base >= 4.2 && <5,
                  syb >= 0.1 && < 0.7,
@@ -61,6 +65,8 @@ Library
                  unordered-containers >= 0.2 && < 0.3,
                  array >= 0.3 && < 0.6,
                  parsec >= 3.1 && < 3.2,
+                 attoparsec-parsec >= 0.1.3,
+                 attoparsec >= 0.13.0.0,
                  mtl >= 1.1 && < 2.3,
                  filepath >= 1.1 && < 1.5,
                  process >= 1 && < 1.5,
@@ -83,10 +89,7 @@ Library
                  blaze-markup >= 0.5.1 && < 0.8,
                  yaml >= 0.8.8.2 && < 0.9,
                  vector >= 0.10 && < 0.12,
-                 hslua >= 0.3 && < 0.5,
                  binary >= 0.5 && < 0.9,
-                 SHA >= 1.6 && < 1.7,
-                 old-time,
                  deepseq >= 1.3 && < 1.5,
                  filemanip >= 0.3 && < 0.4,
                  cmark >= 0.5 && < 0.6,
@@ -95,7 +98,9 @@ Library
                  network-uri >= 2.6 && < 2.7,
                  network >= 2.6
   cpp-options:   -DEMBED_DATA_FILES
-  Ghc-Options:   -Wall -fno-warn-unused-do-bind
+  Ghc-Options:   -O2 -Wall -fno-warn-unused-do-bind -fwarn-unused-binds -fwarn-unused-imports
+  if impl(ghcjs >= 0.2.1)
+      ghcjs-options:     -dedupe -DGHCJS_BROWSER
   Ghc-Prof-Options: -fprof-auto-exported
   Default-Language: Haskell98
   Other-Extensions:   PatternGuards, OverloadedStrings,
@@ -103,37 +108,15 @@ Library
                       RelaxedPolyRec, DeriveDataTypeable, TypeSynonymInstances,
                       FlexibleInstances
   Hs-Source-Dirs:  src
-  Exposed-Modules: Text.Pandoc,
-                   Text.Pandoc.Options,
-                   Text.Pandoc.Pretty,
-                   Text.Pandoc.Shared,
-                   Text.Pandoc.MediaBag,
-                   Text.Pandoc.Error,
+  Exposed-Modules: 
+                   Text.Pandoc.Readers.Markdown,
                    Text.Pandoc.Readers.HTML,
-                   Text.Pandoc.Readers.LaTeX,
-                   Text.Pandoc.Readers.Markdown
-                   Text.Pandoc.Writers.Markdown,
+                   -- Text.Pandoc,
+                   Text.Pandoc.Options,
                    Text.Pandoc.Writers.HTML,
-                   Text.Pandoc.Writers.LaTeX
-                   Text.Pandoc.PDF,
-                   Text.Pandoc.UTF8,
-                   Text.Pandoc.Templates,
-                   Text.Pandoc.XML,
-                   Text.Pandoc.SelfContained,
-                   Text.Pandoc.Process,
-                   Text.Pandoc.CSS
-  Other-Modules:
-                   Text.Pandoc.Data,
-                   Text.Pandoc.Writers.Shared,
-                   Text.Pandoc.Asciify,
-                   Text.Pandoc.MIME,
-                   Text.Pandoc.Parsing,
-                   Text.Pandoc.ImageSize,
-                   Text.Pandoc.Compat.Time,
-                   Text.Pandoc.Compat.Except,
-                   Text.Pandoc.Compat.TagSoupEntity,
-                   Text.Pandoc.Compat.Directory,
-                   Text.Pandoc.Compat.Monoid,
-                   Paths_pandoc_light
+                   Text.Pandoc.Writers.Markdown
+                   -- Text.Pandoc.Pretty, Text.Pandoc.Shared, Text.Pandoc.MediaBag, Text.Pandoc.Error, Text.Pandoc.Readers.HTML, Text.Pandoc.Readers.LaTeX, Text.Pandoc.Writers.Markdown,  Text.Pandoc.Writers.LaTeX Text.Pandoc.PDF, Text.Pandoc.UTF8, Text.Pandoc.Templates,
+                   -- Text.Pandoc.XML,
+                   -- Text.Pandoc.SelfContained, Text.Pandoc.Process, Text.Pandoc.CSS
 
   Buildable:       True

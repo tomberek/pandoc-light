@@ -1,16 +1,26 @@
+resolver: lts-7.1
+# compiler: ghc-8.0.1
+compiler: ghcjs-0.2.1.9007001_ghc-8.0.1
 compiler-check: match-exact
-resolver: nightly-2016-04-17
-# compiler: ghcjs-0.2.0.820160417_ghc-7.10.3
-compiler: ghc-7.10.3
-system-ghc: false
+
 setup-info:
   ghcjs:
     source:
-      ghcjs-0.2.0.820160417_ghc-7.10.3:
-        url: "https://tolysz.org/ghcjs/nightly-2016-04-17-820160417.tar.gz"
+      ghcjs-0.2.1.9007001_ghc-8.0.1:
+          url: http://tolysz.org/ghcjs/ghc-8.0-2016-09-26-lts-7.1-9007001-mem.tar.gz
+          sha1: e640724883238593e2d2f7f03991cb413ec0347b
+system-ghc: false
 nix:
-  enable: true
+  enable: false
 packages:
 - location: '.'
+  # - ./aplite
+  # - ./open-typerep
+  # - ./syntactic
 extra-deps:
-# - network-uri-2.6.1.0
+    # - operational-alacarte-0.1.1
+- attoparsec-parsec-0.1.3
+- ghcjs-dom-0.3.1.0
+- ghcjs-dom-jsffi-0.3.1.0
+
+
